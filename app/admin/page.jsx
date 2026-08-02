@@ -137,7 +137,7 @@ export default function AdminPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 24, color: "#1F2937", filter: "brightness(0.55) contrast(1.2)" }}>🔧</span>
-          <span style={{ fontSize: 22, fontWeight: 700 }}>FIXA Admin</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>FIXA Admin</span>
           <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{filteredCases.length} av {cases.length} ärenden</span>
           <button onClick={fetchCases} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
         </div>
@@ -146,12 +146,12 @@ export default function AdminPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Sök på kundnamn eller ärendenummer..."
-            style={{ flex: "2 1 240px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            style={{ flex: "2 1 240px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, boxSizing: "border-box", color: "#111827", background: "#FFF" }}
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", cursor: "pointer" }}
+            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", color: "#111827", cursor: "pointer" }}
           >
             <option value="all">Alla statusar</option>
             {STATUS_OPTIONS.map((o) => (
@@ -161,7 +161,7 @@ export default function AdminPage() {
           <select
             value={produkttypFilter}
             onChange={(e) => setProdukttypFilter(e.target.value)}
-            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", cursor: "pointer" }}
+            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", color: "#111827", cursor: "pointer" }}
           >
             <option value="all">Alla produkttyper</option>
             {produkttyper.map((p) => (
