@@ -530,7 +530,6 @@ export default function FixaTriageV7() {
           <span style={{ fontSize: 22 }}>🔧</span>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "0.06em", color: "#1B2733" }}>FIXA<span style={{ color: "#F0A03C" }}>.</span></div>
           <div style={{ marginLeft: "auto", fontSize: 12, color: "#9AA6B1" }}>
-            <button onClick={() => setView("tekniker")} style={{ background: "transparent", border: "none", color: "#9AA6B1", fontSize: 11, cursor: "pointer" }}>Admin</button>
           </div>
         </div>
       ) : (
