@@ -7,8 +7,8 @@ import {
 
 // ─────────────────────────────────────────────────────────────
 //  FIXA — AI-triage för vitvarugarantier
-//  Kunden beskriver felet i chatten, FIXA identifierar produkt, felkod,
-//  trolig orsak och rätt reservdel. Löser handhavandefel direkt eller
+const data = await req.json();
+console.log("SAVE-CASE anropat:", JSON.stringify(data));//  trolig orsak och rätt reservdel. Löser handhavandefel direkt eller
 //  skickar strukturerat ärende med kunduppgifter (namn, personnummer,
 //  adress, telefon, e-post, ROT ja/nej) vidare till tekniker.
 //
@@ -474,23 +474,31 @@ const confirmSubmission = async () => {
     };
     setOrders((prev) => [order, ...prev]);
     setCaseData((prev) => ({ ...prev, status: "bokad" }));
-    
-    fetch("/api/save-case", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...caseData,
-        kund_namn: customerForm.namn,
-        kund_personnr: customerForm.personnr,
-        kund_gata: customerForm.gata,
-        kund_postnr: customerForm.postnr,
-        kund_ort: customerForm.ort,
-        kund_telefon: customerForm.telefon,
-        kund_epost: customerForm.epost,
-        rot_avdrag: customerForm.rot,
-      }),
-    }).catch((e) => console.error("Kunde inte spara:", e));
 
+fetch("/api/save-case", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    ...caseData,
+    kund_namn: customerForm.namn,
+    kund_personnr: customerForm.personnr,
+    kund_gata: customerForm.gata,
+    kund_postnr: customerForm.postnr,
+    kund_ort: customerForm.ort,
+    kund_telefon: customerForm.telefon,
+    kund_epost: customerForm.epost,
+    rot_avdrag: customerForm.rot,
+  }),
+})
+  .then(async (res) => {
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("Save-case misslyckades:", res.status, text);
+    } else {
+      console.log("Ärende sparat!");
+    }
+  })
+  .catch((e) => console.error("Kunde inte spara:", e));
   const resetCase = () => {
     setCaseData(emptyCase);
     countedRef.current = false;
