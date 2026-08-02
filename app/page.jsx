@@ -7,8 +7,6 @@ import {
 
 // ─────────────────────────────────────────────────────────────
 //  FIXA — AI-triage för vitvarugarantier
-const data = await req.json();
-console.log("SAVE-CASE anropat:", JSON.stringify(data));//  trolig orsak och rätt reservdel. Löser handhavandefel direkt eller
 //  skickar strukturerat ärende med kunduppgifter (namn, personnummer,
 //  adress, telefon, e-post, ROT ja/nej) vidare till tekniker.
 //
