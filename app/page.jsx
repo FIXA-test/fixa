@@ -496,6 +496,8 @@ fetch("/api/chat/save-case", {  method: "POST",
     }
   })
   .catch((e) => console.error("Kunde inte spara:", e));
+  };
+
   const resetCase = () => {
     setCaseData(emptyCase);
     countedRef.current = false;
@@ -1097,5 +1099,4 @@ fetch("/api/chat/save-case", {  method: "POST",
 
     </div>
   );
-}
 }
