@@ -475,8 +475,7 @@ const confirmSubmission = async () => {
     setOrders((prev) => [order, ...prev]);
     setCaseData((prev) => ({ ...prev, status: "bokad" }));
 
-fetch("/api/save-case", {
-  method: "POST",
+fetch("/api/chat/save-case", {  method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     ...caseData,
