@@ -136,7 +136,7 @@ export default function AdminPage() {
     <div style={{ minHeight: "100vh", background: "#F7F9FB", padding: 24 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <span style={{ fontSize: 24 }}>🔧</span>
+          <span style={{ fontSize: 24, color: "#1F2937", filter: "brightness(0.55) contrast(1.2)" }}>🔧</span>
           <span style={{ fontSize: 22, fontWeight: 700 }}>FIXA Admin</span>
           <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{filteredCases.length} av {cases.length} ärenden</span>
           <button onClick={fetchCases} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
@@ -257,9 +257,9 @@ export default function AdminPage() {
               </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>🔧 Vitvaran</div>
-                <div style={{ fontSize: 14 }}>{selected.produkttyp || "—"} · {selected.marke || "—"} · {selected.modell || "—"}</div>
+                <div style={{ fontSize: 14, color: "#37485A" }}>{selected.produkttyp || "—"} · {selected.marke || "—"} · {selected.modell || "—"}</div>
                 {selected.felkod && <div style={{ fontSize: 13, color: "#7A8794", marginTop: 4 }}>Felkod: {selected.felkod}</div>}
-                {selected.symptom && <div style={{ fontSize: 13, marginTop: 4 }}>{selected.symptom}</div>}
+                {selected.symptom && <div style={{ fontSize: 13, marginTop: 4, color: "#37485A" }}>{selected.symptom}</div>}
               </div>
               {(selected.trolig_orsak || selected.reservdel) && (
                 <div style={{ marginBottom: 16, background: "#E4F3EB", borderRadius: 8, padding: 12 }}>
