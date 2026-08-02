@@ -41,14 +41,14 @@ function timeLeft(createdAt) {
 const URGENCY_META = {
   ok: { color: "#1E7A4D", bg: "#E4F3EB" },
   warning: { color: "#8A5A10", bg: "#FBF1E3" },
-  critical: { color: "#C77B1E", bg: "#FBF1E3" },
+  critical: { color: "#B54708", bg: "#FBF1E3" },
   over: { color: "#A3352B", bg: "#FDECEA" },
 };
 
 // Ärendets resa, från triage till avslutat besök
 const STATUS_OPTIONS = [
   { value: "lost_remote", label: "Löst av kund (distans)", color: "#1E7A4D", bg: "#E4F3EB" },
-  { value: "new", label: "Ny - ej kontaktad", color: "#C77B1E", bg: "#FBF1E3" },
+  { value: "new", label: "Ny - ej kontaktad", color: "#B54708", bg: "#FBF1E3" },
   { value: "contacted", label: "Kontaktad", color: "#2C5A82", bg: "#E7EFF6" },
   { value: "part_ordered", label: "Reservdel beställd", color: "#8A5A10", bg: "#FBF1E3" },
   { value: "ready_to_book", label: "Redo att boka", color: "#5B3E8F", bg: "#EEE9F7" },
@@ -187,7 +187,7 @@ export default function AdminPage() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{c.kund_namn || "Okänd kund"}</span>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>{c.kund_namn || "Okänd kund"}</span>
                   <select
                     value={statusValue}
                     onClick={(e) => e.stopPropagation()}
@@ -217,7 +217,7 @@ export default function AdminPage() {
           {selected ? (
             <div style={{ background: "#FFF", borderRadius: 12, padding: 24, border: "1px solid #EAEEF2", height: "fit-content", position: "sticky", top: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.kund_namn || "Okänd kund"}</div>
+                <div style={{ fontWeight: 700, fontSize: 18, color: "#111827" }}>{selected.kund_namn || "Okänd kund"}</div>
                 {(() => {
                   const createdMs = selected.created_at ? new Date(selected.created_at).getTime() : null;
                   const tl = timeLeft(createdMs);
