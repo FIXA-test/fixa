@@ -452,7 +452,7 @@ export default function FixaTriageV7() {
       ? receiptWarranty(c.inkopsdatum, c.garanti_kvitto)
       : warrantyCheckSerial(c.serienr);
 
-  const confirmSubmission = () => {
+ const confirmSubmission = async () => {
     // Validera att alla obligatoriska fält är ifyllda
     if (!customerForm.namn || !customerForm.personnr || !customerForm.gata || !customerForm.postnr || !customerForm.ort || !customerForm.telefon || !customerForm.epost || !customerForm.rot) {
       setError("Fyll i alla fält innan du skickar in ärendet.");
