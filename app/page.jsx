@@ -34,6 +34,11 @@ STEG 1 — LISTA UT VILKEN APPARAT DET ÄR (gör detta själv, anta inte)
 - Be gärna om FOTO av apparaten och/eller dess typskylt/modelldekal (dörröppningen på tvätt/disk, sidoväggen inuti kylen, i luckan på torktumlare/ugn). Läs av produkttyp, märke, modell, serienummer och ev. felkod från bilden och bekräfta vad du ser. Ett foto på själva felet/läckan hjälper också teknikern.
 - Fyll i "produkttyp" i klartext så fort du vet den (t.ex. "Tvättmaskin", "Diskmaskin", "Kyl/Frys", "Inbyggnadsugn").
 
+FELKODSSÖKNING (du kan söka på webben — använd det)
+- Uppger kunden en specifik felkod för ett känt märke (Siemens, Electrolux, Elvita, Cylinda, Asko, Miele, Bosch, LG, Samsung, Whirlpool m.fl.): sök upp vad koden betyder för just det märket/den modellen istället för att gissa utifrån allmän kunskap. Olika märken återanvänder samma koder för helt olika fel.
+- Var öppen med att du kollar upp det, kort och naturligt — t.ex. "Ge mig en sekund, jag kollar vad E23 betyder på just din Siemens-maskin" — inte tyst i bakgrunden.
+- Sökresultatet ändrar INTE säkerhetsramen nedan. En officiell felkodsförklaring må peka på en trolig orsak inuti maskinen, men det gör den inte plötsligt säker för kunden att åtgärda själv.
+
 KVITTO / INKÖPSBEVIS (viktig funktion)
 - Om kunden laddar upp ett kvitto eller en orderbekräftelse: läs av och fyll i "butik" (butikens namn och ort), "ordernr" (order-/kvittonummer), "inkopsdatum" (YYYY-MM-DD) och "garanti_kvitto" (garantitexten, t.ex. "5 års konsumentgaranti" — räkna gärna ut t.o.m.-datum utifrån inköpsdatum). Nämn även vilka produkter som köptes om det framgår.
 - Detta hjälper personalen att direkt veta VAR produkten är köpt (vilken butik), vilket ordernummer som gäller och OM den är inom garanti — så rätt butik/garantigivare kan ta ärendet. Bekräfta vänligt vad du läste av. Fråga gärna efter kvittot om garantifrågan är relevant och du inte har det.
@@ -267,6 +272,7 @@ export default function FixaTriageV7() {
   const [input, setInput] = useState("");
   const [pendingImage, setPendingImage] = useState(null); // {data, mediaType, preview, isReceipt}
   const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const emptyCase = {
     produkttyp: "", marke: "", modell: "", serienr: "", felkod: "", symptom: "",
@@ -307,6 +313,7 @@ export default function FixaTriageV7() {
     return () => clearInterval(id);
   }, [view]);
   const countedRef = useRef(false);
+  const searchTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
   const uploadKindRef = useRef("product");
@@ -420,6 +427,9 @@ export default function FixaTriageV7() {
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setLoading(true);
+    // Ett vanligt svar kommer oftast inom ett par sekunder — tar det längre är en
+    // webbsökning efter felkod en trolig anledning, så vi byter text i indikatorn.
+    searchTimerRef.current = setTimeout(() => setSearching(true), 3500);
     try {
       const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.raw ?? m.content }));
       const res = await fetch("/api/chat", {
@@ -464,6 +474,8 @@ export default function FixaTriageV7() {
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
       setError(e.message || "Kunde inte nå assistenten. Försök igen.");
     } finally {
+      clearTimeout(searchTimerRef.current);
+      setSearching(false);
       setLoading(false);
     }
   };
@@ -658,7 +670,7 @@ fetch("/api/chat/save-case", {  method: "POST",
                     background: "#FFFFFF", border: "1px solid #EAEEF2",
                     boxShadow: "0 1px 2px rgba(0,0,0,0.06)", display: "flex", gap: 8, alignItems: "center",
                   }}>
-                    <span style={{ fontSize: 13, color: "#7A8794", fontStyle: "italic" }}>FIXA tänker</span>
+                    <span style={{ fontSize: 13, color: "#7A8794", fontStyle: "italic" }}>{searching ? "Kollar upp felkoden åt dig…" : "FIXA tänker"}</span>
                     <span style={{ display: "flex", gap: 4 }}>
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0s" }}></span>
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0.2s" }}></span>

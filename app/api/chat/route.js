@@ -14,6 +14,9 @@ export async function POST(req) {
       max_tokens: 1000,
       system,
       messages,
+      tools: [
+        { type: "web_search_20260318", name: "web_search", max_uses: 1 },
+      ],
     });
 
     if (caseData && (caseData.status === "tekniker" || caseData.status === "lost")) {
