@@ -543,6 +543,10 @@ fetch("/api/chat/save-case", {  method: "POST",
           0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
           30% { transform: translateY(-6px); opacity: 1; }
         }
+        .fixa-order-grid { grid-template-columns: 340px 1fr; }
+        @media (max-width: 860px) {
+          .fixa-order-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
       {/* Topbar - anpassad för kunden */}
       {view === "kund" ? (
@@ -768,7 +772,7 @@ fetch("/api/chat/save-case", {  method: "POST",
             )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 14, alignItems: "start" }}>
+          <div className="fixa-order-grid" style={{ display: "grid", gap: 14, alignItems: "start" }}>
 
             {/* VÄNSTER: Lista av ärenden */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
