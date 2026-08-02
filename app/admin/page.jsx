@@ -9,14 +9,58 @@ const supabase = createClient(
 
 const ADMIN_PASSWORD = "fixa2026";
 
+// Hur lång tid sedan ärendet skapades
+function timeSince(createdAt) {
+  if (!createdAt) return "—";
+  const diffMs = Date.now() - createdAt;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just nu";
+  if (mins < 60) return `${mins} min sedan`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}min sedan`;
+  return `${Math.floor(hrs / 24)}d ${hrs % 24}h sedan`;
+}
+
+// Räknar ner mot 24h-återkopplingsgränsen
+function timeLeft(createdAt) {
+  if (!createdAt) return { text: "—", urgency: "ok" };
+  const deadline = createdAt + 24 * 60 * 60 * 1000;
+  const diffMs = deadline - Date.now();
+  if (diffMs <= 0) {
+    const overHrs = Math.floor(-diffMs / 3600000);
+    return { text: `Försenat med ${overHrs}h`, urgency: "over" };
+  }
+  const hrs = Math.floor(diffMs / 3600000);
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  const text = hrs > 0 ? `${hrs}h ${mins}min kvar` : `${mins}min kvar`;
+  let urgency = "ok";
+  if (hrs < 2) urgency = "critical";
+  else if (hrs < 6) urgency = "warning";
+  return { text, urgency };
+}
+const URGENCY_META = {
+  ok: { color: "#1E7A4D", bg: "#E4F3EB" },
+  warning: { color: "#8A5A10", bg: "#FBF1E3" },
+  critical: { color: "#C77B1E", bg: "#FBF1E3" },
+  over: { color: "#A3352B", bg: "#FDECEA" },
+};
+
 export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [cases, setCases] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [, setTick] = useState(0);
 
   useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
+
+  // Uppdaterar återkopplingstimern varje minut
+  useEffect(() => {
+    if (!loggedIn) return;
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, [loggedIn]);
 
   const fetchCases = async () => {
     setLoading(true);
@@ -56,7 +100,11 @@ export default function AdminPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {loading && <div style={{ color: "#7A8794", padding: 20 }}>Laddar ärenden...</div>}
             {!loading && cases.length === 0 && <div style={{ color: "#7A8794", padding: 20 }}>Inga ärenden än.</div>}
-            {cases.map(c => (
+            {cases.map(c => {
+              const createdMs = c.created_at ? new Date(c.created_at).getTime() : null;
+              const tl = timeLeft(createdMs);
+              const um = URGENCY_META[tl.urgency];
+              return (
               <div key={c.id} onClick={() => setSelected(c)} style={{
                 background: "#FFF", borderRadius: 12, padding: 16, cursor: "pointer",
                 border: selected?.id === c.id ? "2px solid #2C5A82" : "1px solid #EAEEF2",
@@ -72,13 +120,34 @@ export default function AdminPage() {
                 </div>
                 <div style={{ fontSize: 13, color: "#37485A" }}>{c.produkttyp || "—"} {c.marke ? `· ${c.marke}` : ""} {c.modell ? `· ${c.modell}` : ""}</div>
                 <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom"}</div>
-                <div style={{ fontSize: 11, color: "#9AA6B1", marginTop: 6 }}>{new Date(c.created_at).toLocaleString("sv-SE")}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  <span style={{ fontSize: 11, color: "#9AA6B1" }}>{new Date(c.created_at).toLocaleString("sv-SE")}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: um.color, background: um.bg, borderRadius: 10, padding: "2px 8px" }}>
+                    🕐 {tl.text}
+                  </span>
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           {selected ? (
             <div style={{ background: "#FFF", borderRadius: 12, padding: 24, border: "1px solid #EAEEF2", height: "fit-content", position: "sticky", top: 24 }}>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 16 }}>{selected.kund_namn || "Okänd kund"}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.kund_namn || "Okänd kund"}</div>
+                {(() => {
+                  const createdMs = selected.created_at ? new Date(selected.created_at).getTime() : null;
+                  const tl = timeLeft(createdMs);
+                  const um = URGENCY_META[tl.urgency];
+                  return (
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 12, color: "#7A8794" }}>Inskickat {timeSince(createdMs)}</div>
+                      <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: um.color, background: um.bg, borderRadius: 8, padding: "4px 10px", display: "inline-block" }}>
+                        🕐 {tl.text} till 24h-återkoppling
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📞 Kontakt</div>
                 {selected.kund_telefon && <div style={{ fontSize: 14, marginBottom: 4 }}>📱 <a href={`tel:${selected.kund_telefon}`} style={{ color: "#2C5A82" }}>{selected.kund_telefon}</a></div>}
