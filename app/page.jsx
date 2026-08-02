@@ -475,8 +475,6 @@ const confirmSubmission = async () => {
     setOrders((prev) => [order, ...prev]);
     setCaseData((prev) => ({ ...prev, status: "bokad" }));
 
-    try {
-      await
   const resetCase = () => {
     setCaseData(emptyCase);
     countedRef.current = false;
@@ -1078,4 +1076,5 @@ const confirmSubmission = async () => {
 
     </div>
   );
+}
 }
