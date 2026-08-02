@@ -16,16 +16,11 @@ export default function AdminPage() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (loggedIn) fetchCases();
-  }, [loggedIn]);
+  useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
 
   const fetchCases = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("cases")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("cases").select("*").order("created_at", { ascending: false });
     setCases(data || []);
     setLoading(false);
   };
@@ -36,18 +31,12 @@ export default function AdminPage() {
         <div style={{ fontSize: 28, marginBottom: 8 }}>🔧</div>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>FIXA Admin</div>
         <div style={{ fontSize: 14, color: "#7A8794", marginBottom: 24 }}>Logga in för att se ärenden</div>
-        <input
-          type="password"
-          placeholder="Lösenord"
-          value={password}
+        <input type="password" placeholder="Lösenord" value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === "Enter" && password === ADMIN_PASSWORD && setLoggedIn(true)}
-          style={{ width: "100%", padding: "12px 14px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 16, marginBottom: 12, boxSizing: "border-box" }}
-        />
-        <button
-          onClick={() => password === ADMIN_PASSWORD ? setLoggedIn(true) : alert("Fel lösenord")}
-          style={{ width: "100%", background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "12px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}
-        >
+          style={{ width: "100%", padding: "12px 14px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 16, marginBottom: 12, boxSizing: "border-box" }} />
+        <button onClick={() => password === ADMIN_PASSWORD ? setLoggedIn(true) : alert("Fel lösenord")}
+          style={{ width: "100%", background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "12px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
           Logga in
         </button>
       </div>
@@ -79,9 +68,7 @@ export default function AdminPage() {
                     fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
                     background: c.status === "tekniker" ? "#E4F3EB" : "#E6F1FB",
                     color: c.status === "tekniker" ? "#1E5A3D" : "#185FA5"
-                  }}>
-                    {c.status === "tekniker" ? "Tekniker" : "Löst"}
-                  </span>
+                  }}>{c.status === "tekniker" ? "Tekniker" : "Löst"}</span>
                 </div>
                 <div style={{ fontSize: 13, color: "#37485A" }}>{c.produkttyp || "—"} {c.marke ? `· ${c.marke}` : ""} {c.modell ? `· ${c.modell}` : ""}</div>
                 <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom"}</div>

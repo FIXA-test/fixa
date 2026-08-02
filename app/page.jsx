@@ -475,6 +475,21 @@ export default function FixaTriageV7() {
     };
     setOrders((prev) => [order, ...prev]);
     setCaseData((prev) => ({ ...prev, status: "bokad" }));
+    await fetch("/api/save-case", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    ...caseData,
+    kund_namn: customerForm.namn,
+    kund_personnr: customerForm.personnr,
+    kund_gata: customerForm.gata,
+    kund_postnr: customerForm.postnr,
+    kund_ort: customerForm.ort,
+    kund_telefon: customerForm.telefon,
+    kund_epost: customerForm.epost,
+    rot_avdrag: customerForm.rot,
+  }),
+});
     setFormSubmitted(true);
   };
 
