@@ -1,6 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+const supabase = createClient(
+  "https://lwnwoeftisepokhgcudq.supabase.co",
+  "sb_publishable_bes2DlczBvaK3msGAQmDrw_PZoTHmqZ"
+);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
