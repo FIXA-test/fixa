@@ -70,6 +70,9 @@ export default function AdminPage() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [, setTick] = useState(0);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [produkttypFilter, setProdukttypFilter] = useState("all");
 
   useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
 
@@ -100,6 +103,17 @@ export default function AdminPage() {
     }
   };
 
+  // Produkttyper som faktiskt förekommer i ärendena — ingen hårdkodad lista att hålla i synk
+  const produkttyper = Array.from(new Set(cases.map((c) => c.produkttyp).filter(Boolean))).sort();
+
+  const filteredCases = cases.filter((c) => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || (c.kund_namn || "").toLowerCase().includes(q) || (c.id || "").toLowerCase().includes(q);
+    const matchesStatus = statusFilter === "all" || normalizeStatus(c.status) === statusFilter;
+    const matchesProdukttyp = produkttypFilter === "all" || c.produkttyp === produkttypFilter;
+    return matchesSearch && matchesStatus && matchesProdukttyp;
+  });
+
   if (!loggedIn) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F7F9FB" }}>
       <div style={{ background: "#FFF", borderRadius: 16, padding: 40, width: 360, boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
@@ -124,14 +138,43 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 24 }}>🔧</span>
           <span style={{ fontSize: 22, fontWeight: 700 }}>FIXA Admin</span>
-          <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{cases.length} ärenden totalt</span>
+          <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{filteredCases.length} av {cases.length} ärenden</span>
           <button onClick={fetchCases} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Sök på kundnamn eller ärendenummer..."
+            style={{ flex: "2 1 240px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", cursor: "pointer" }}
+          >
+            <option value="all">Alla statusar</option>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <select
+            value={produkttypFilter}
+            onChange={(e) => setProdukttypFilter(e.target.value)}
+            style={{ flex: "1 1 180px", padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", cursor: "pointer" }}
+          >
+            <option value="all">Alla produkttyper</option>
+            {produkttyper.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {loading && <div style={{ color: "#7A8794", padding: 20 }}>Laddar ärenden...</div>}
             {!loading && cases.length === 0 && <div style={{ color: "#7A8794", padding: 20 }}>Inga ärenden än.</div>}
-            {cases.map(c => {
+            {!loading && cases.length > 0 && filteredCases.length === 0 && <div style={{ color: "#7A8794", padding: 20 }}>Inga ärenden matchar sökningen/filtren.</div>}
+            {filteredCases.map(c => {
               const createdMs = c.created_at ? new Date(c.created_at).getTime() : null;
               const tl = timeLeft(createdMs);
               const um = URGENCY_META[tl.urgency];
