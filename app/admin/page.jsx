@@ -1,12 +1,10 @@
 "use client";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
 const supabase = createClient(
   "https://lwnwoeftisepokhgcudq.supabase.co",
   "sb_publishable_bes2DlczBvaK3msGAQmDrw_PZoTHmqZ"
-);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 );
 
 const ADMIN_PASSWORD = "fixa2026";
@@ -65,9 +63,7 @@ export default function AdminPage() {
           <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{cases.length} ärenden totalt</span>
           <button onClick={fetchCases} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {/* Ärendelista */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {loading && <div style={{ color: "#7A8794", padding: 20 }}>Laddar ärenden...</div>}
             {!loading && cases.length === 0 && <div style={{ color: "#7A8794", padding: 20 }}>Inga ärenden än.</div>}
@@ -81,39 +77,34 @@ export default function AdminPage() {
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{c.kund_namn || "Okänd kund"}</span>
                   <span style={{
                     fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
-                    background: c.status === "tekniker" ? "#E4F3EB" : c.status === "lost" ? "#E6F1FB" : "#F7F9FB",
-                    color: c.status === "tekniker" ? "#1E5A3D" : c.status === "lost" ? "#185FA5" : "#7A8794"
+                    background: c.status === "tekniker" ? "#E4F3EB" : "#E6F1FB",
+                    color: c.status === "tekniker" ? "#1E5A3D" : "#185FA5"
                   }}>
-                    {c.status === "tekniker" ? "Tekniker" : c.status === "lost" ? "Löst" : "Pågår"}
+                    {c.status === "tekniker" ? "Tekniker" : "Löst"}
                   </span>
                 </div>
                 <div style={{ fontSize: 13, color: "#37485A" }}>{c.produkttyp || "—"} {c.marke ? `· ${c.marke}` : ""} {c.modell ? `· ${c.modell}` : ""}</div>
-                <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom angivet"}</div>
+                <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom"}</div>
                 <div style={{ fontSize: 11, color: "#9AA6B1", marginTop: 6 }}>{new Date(c.created_at).toLocaleString("sv-SE")}</div>
               </div>
             ))}
           </div>
-
-          {/* Detaljvy */}
           {selected ? (
             <div style={{ background: "#FFF", borderRadius: 12, padding: 24, border: "1px solid #EAEEF2", height: "fit-content", position: "sticky", top: 24 }}>
               <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 16 }}>{selected.kund_namn || "Okänd kund"}</div>
-
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📞 Kontakt</div>
                 {selected.kund_telefon && <div style={{ fontSize: 14, marginBottom: 4 }}>📱 <a href={`tel:${selected.kund_telefon}`} style={{ color: "#2C5A82" }}>{selected.kund_telefon}</a></div>}
                 {selected.kund_epost && <div style={{ fontSize: 14, marginBottom: 4 }}>✉️ <a href={`mailto:${selected.kund_epost}`} style={{ color: "#2C5A82" }}>{selected.kund_epost}</a></div>}
                 {selected.kund_gata && <div style={{ fontSize: 14, marginBottom: 4 }}>📍 {selected.kund_gata}, {selected.kund_postnr} {selected.kund_ort}</div>}
-                {selected.rot_avdrag && <div style={{ fontSize: 13, color: "#1E5A3D", marginTop: 4 }}>ROT-avdrag: {selected.rot_avdrag}</div>}
+                {selected.rot_avdrag && <div style={{ fontSize: 13, color: "#1E5A3D", marginTop: 4 }}>ROT: {selected.rot_avdrag}</div>}
               </div>
-
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>🔧 Vitvaran</div>
                 <div style={{ fontSize: 14 }}>{selected.produkttyp || "—"} · {selected.marke || "—"} · {selected.modell || "—"}</div>
                 {selected.felkod && <div style={{ fontSize: 13, color: "#7A8794", marginTop: 4 }}>Felkod: {selected.felkod}</div>}
                 {selected.symptom && <div style={{ fontSize: 13, marginTop: 4 }}>{selected.symptom}</div>}
               </div>
-
               {(selected.trolig_orsak || selected.reservdel) && (
                 <div style={{ marginBottom: 16, background: "#E4F3EB", borderRadius: 8, padding: 12 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#1E5A3D", textTransform: "uppercase", marginBottom: 8 }}>🛠 FIXA:s bedömning</div>
@@ -122,7 +113,6 @@ export default function AdminPage() {
                   {selected.reservdel && <div style={{ fontSize: 13, fontWeight: 700 }}>Ta med: {selected.reservdel}</div>}
                 </div>
               )}
-
               {selected.rapport && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📋 Sammanfattning</div>
