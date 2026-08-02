@@ -401,7 +401,7 @@ export default function FixaTriageV7() {
     setLoading(true);
     try {
       const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.raw ?? m.content }));
-      const res = await fetch(""/api/chat"", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
