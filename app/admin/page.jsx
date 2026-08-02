@@ -45,6 +45,24 @@ const URGENCY_META = {
   over: { color: "#A3352B", bg: "#FDECEA" },
 };
 
+// Ärendets resa, från triage till avslutat besök
+const STATUS_OPTIONS = [
+  { value: "lost_remote", label: "Löst av kund (distans)", color: "#1E7A4D", bg: "#E4F3EB" },
+  { value: "new", label: "Ny - ej kontaktad", color: "#C77B1E", bg: "#FBF1E3" },
+  { value: "contacted", label: "Kontaktad", color: "#2C5A82", bg: "#E7EFF6" },
+  { value: "part_ordered", label: "Reservdel beställd", color: "#8A5A10", bg: "#FBF1E3" },
+  { value: "ready_to_book", label: "Redo att boka", color: "#5B3E8F", bg: "#EEE9F7" },
+  { value: "booked", label: "Tekniker bokad", color: "#185FA5", bg: "#E6F1FB" },
+  { value: "done", label: "Avslutat", color: "#37485A", bg: "#EDEFF1" },
+];
+// "tekniker"/"lost" är gamla värden från innan statuslistan fanns - mappas bara vid visning,
+// sparas alltid som ett av STATUS_OPTIONS-värdena ovan så fort någon ändrar statusen.
+function normalizeStatus(status) {
+  if (status === "tekniker") return "new";
+  if (status === "lost") return "lost_remote";
+  return STATUS_OPTIONS.some((o) => o.value === status) ? status : "new";
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
@@ -67,6 +85,19 @@ export default function AdminPage() {
     const { data } = await supabase.from("cases").select("*").order("created_at", { ascending: false });
     setCases(data || []);
     setLoading(false);
+  };
+
+  const updateStatus = async (caseId, newStatus) => {
+    const prevCases = cases;
+    const prevSelected = selected;
+    setCases((cs) => cs.map((c) => (c.id === caseId ? { ...c, status: newStatus } : c)));
+    setSelected((s) => (s && s.id === caseId ? { ...s, status: newStatus } : s));
+    const { error } = await supabase.from("cases").update({ status: newStatus }).eq("id", caseId);
+    if (error) {
+      console.error("Kunde inte uppdatera status:", error);
+      setCases(prevCases);
+      setSelected(prevSelected);
+    }
   };
 
   if (!loggedIn) return (
@@ -104,19 +135,29 @@ export default function AdminPage() {
               const createdMs = c.created_at ? new Date(c.created_at).getTime() : null;
               const tl = timeLeft(createdMs);
               const um = URGENCY_META[tl.urgency];
+              const statusValue = normalizeStatus(c.status);
+              const statusMeta = STATUS_OPTIONS.find((o) => o.value === statusValue);
               return (
               <div key={c.id} onClick={() => setSelected(c)} style={{
                 background: "#FFF", borderRadius: 12, padding: 16, cursor: "pointer",
                 border: selected?.id === c.id ? "2px solid #2C5A82" : "1px solid #EAEEF2",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{c.kund_namn || "Okänd kund"}</span>
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
-                    background: c.status === "tekniker" ? "#E4F3EB" : "#E6F1FB",
-                    color: c.status === "tekniker" ? "#1E5A3D" : "#185FA5"
-                  }}>{c.status === "tekniker" ? "Tekniker" : "Löst"}</span>
+                  <select
+                    value={statusValue}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => updateStatus(c.id, e.target.value)}
+                    style={{
+                      fontSize: 11, fontWeight: 700, padding: "3px 6px", borderRadius: 20, border: "none",
+                      background: statusMeta.bg, color: statusMeta.color, cursor: "pointer",
+                    }}
+                  >
+                    {STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ fontSize: 13, color: "#37485A" }}>{c.produkttyp || "—"} {c.marke ? `· ${c.marke}` : ""} {c.modell ? `· ${c.modell}` : ""}</div>
                 <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom"}</div>
@@ -147,6 +188,22 @@ export default function AdminPage() {
                     </div>
                   );
                 })()}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>Status</div>
+                <select
+                  value={normalizeStatus(selected.status)}
+                  onChange={(e) => updateStatus(selected.id, e.target.value)}
+                  style={{
+                    fontSize: 14, fontWeight: 700, padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E6EA", cursor: "pointer",
+                    background: STATUS_OPTIONS.find((o) => o.value === normalizeStatus(selected.status)).bg,
+                    color: STATUS_OPTIONS.find((o) => o.value === normalizeStatus(selected.status)).color,
+                  }}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📞 Kontakt</div>
