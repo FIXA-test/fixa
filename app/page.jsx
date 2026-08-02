@@ -305,6 +305,20 @@ export default function FixaTriageV7() {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [, setTick] = useState(0);
+  // Ej inskickat ärende sparat i en tidigare session — erbjuds som återupptagning nedan
+  const [resumePrompt, setResumePrompt] = useState(() => {
+    try {
+      const raw = localStorage.getItem("fixa_draft_case");
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft || !draft.savedAt || !Array.isArray(draft.messages) || draft.messages.length <= 1) return null;
+      if (Date.now() - draft.savedAt > 48 * 60 * 60 * 1000) {
+        localStorage.removeItem("fixa_draft_case");
+        return null;
+      }
+      return draft;
+    } catch { return null; }
+  });
 
   // Uppdaterar tidsangivelserna varje minut
   useEffect(() => {
@@ -361,6 +375,22 @@ export default function FixaTriageV7() {
       console.warn("Kunde inte spara statistik:", e);
     }
   }, [sessionStats]);
+
+  // Sparar pågående (ej inskickat) ärende lokalt så kunden kan återuppta det inom 48h
+  useEffect(() => {
+    if (formSubmitted || messages.length <= 1) return;
+    try {
+      localStorage.setItem("fixa_draft_case", JSON.stringify({ messages, caseData, customerForm, savedAt: Date.now() }));
+    } catch (e) {
+      console.warn("Kunde inte spara pågående ärende:", e);
+    }
+  }, [messages, caseData, customerForm, formSubmitted]);
+
+  // Ärendet är inskickat — den sparade utkastkonversationen behövs inte längre
+  useEffect(() => {
+    if (!formSubmitted) return;
+    try { localStorage.removeItem("fixa_draft_case"); } catch (e) { /* no-op */ }
+  }, [formSubmitted]);
 
   const pickImage = (kind) => {
     uploadKindRef.current = kind;
@@ -541,6 +571,24 @@ fetch("/api/chat/save-case", {  method: "POST",
     setFormSubmitted(false);
     setCustomerForm({ namn: "", personnr: "", gata: "", postnr: "", ort: "", telefon: "", epost: "", rot: "" });
     setMessages([{ role: "assistant", content: "Nytt ärende! Vilken apparat gäller det, och vad är problemet? (Du kan bifoga en bild 📷 när du vill.)" }]);
+    try { localStorage.removeItem("fixa_draft_case"); } catch (e) { /* no-op */ }
+  };
+
+  const resumeDraft = () => {
+    if (resumePrompt) {
+      const restoredCase = resumePrompt.caseData || emptyCase;
+      setMessages(resumePrompt.messages);
+      setCaseData(restoredCase);
+      if (resumePrompt.customerForm) setCustomerForm(resumePrompt.customerForm);
+      // Redan räknad i en tidigare session — undviker dubbelräkning i sessionsstatistiken
+      if (restoredCase.status === "lost" || restoredCase.status === "tekniker") countedRef.current = true;
+    }
+    setResumePrompt(null);
+  };
+
+  const discardDraft = () => {
+    try { localStorage.removeItem("fixa_draft_case"); } catch (e) { /* no-op */ }
+    setResumePrompt(null);
   };
 
   const status = STATUS_META[caseData.status] || STATUS_META.pagar;
@@ -613,7 +661,26 @@ fetch("/api/chat/save-case", {  method: "POST",
       {/* ══════ KUND ══════ */}
       {view === "kund" && (
         <div style={{ flex: 1, display: "flex", padding: 16, maxWidth: 720, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-          <div style={{ ...S.card, flex: 1, display: "flex", flexDirection: "column", minHeight: 600, overflow: "hidden", background: "#FFFFFF" }}>
+          <div style={{ ...S.card, flex: 1, display: "flex", flexDirection: "column", minHeight: 600, overflow: "hidden", background: "#FFFFFF", position: "relative" }}>
+            {resumePrompt && (
+              <div style={{ position: "absolute", inset: 0, background: "rgba(27,39,51,0.55)", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+                <div style={{ background: "#FFFFFF", borderRadius: 16, padding: 28, maxWidth: 340, textAlign: "center", boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}>
+                  <div style={{ fontSize: 34, marginBottom: 10 }}>🔧</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1B2733", marginBottom: 8 }}>Vi ser att du påbörjat ett ärende</div>
+                  <div style={{ fontSize: 13.5, color: "#37485A", lineHeight: 1.5, marginBottom: 18 }}>
+                    Vill du fortsätta där du var, eller starta om från början?
+                  </div>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                    <button onClick={discardDraft} style={{ background: "#F7F9FB", color: "#37485A", border: "1px solid #C9D1D8", borderRadius: 8, padding: "11px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+                      Starta om
+                    </button>
+                    <button onClick={resumeDraft} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "11px 16px", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>
+                      Fortsätt där jag var
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Chatthead med FIXA-identitet */}
             <div style={{ background: "linear-gradient(135deg, #2C5A82 0%, #3A6D96 100%)", padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
