@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+} from "recharts";
 
 const supabase = createClient(
   "https://lwnwoeftisepokhgcudq.supabase.co",
@@ -73,6 +76,7 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [produkttypFilter, setProdukttypFilter] = useState("all");
+  const [view, setView] = useState("cases");
 
   useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
 
@@ -138,9 +142,32 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 24, color: "#1F2937", filter: "brightness(0.55) contrast(1.2)" }}>🔧</span>
           <span style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>FIXA Admin</span>
-          <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{filteredCases.length} av {cases.length} ärenden</span>
-          <button onClick={fetchCases} style={{ background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
+          {view === "cases" && (
+            <span style={{ marginLeft: "auto", fontSize: 13, color: "#7A8794" }}>{filteredCases.length} av {cases.length} ärenden</span>
+          )}
+          <button onClick={fetchCases} style={{ marginLeft: view === "cases" ? 0 : "auto", background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" }}>Uppdatera</button>
         </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[
+            { key: "cases", label: "Ärenden" },
+            { key: "stats", label: "Statistik" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setView(t.key)}
+              style={{
+                padding: "8px 18px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700,
+                border: view === t.key ? "1px solid #2C5A82" : "1px solid #E2E6EA",
+                background: view === t.key ? "#2C5A82" : "#FFF",
+                color: view === t.key ? "#FFF" : "#37485A",
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {view === "cases" && (
+        <>
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <input
             value={search}
@@ -282,6 +309,191 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+        </>
+        )}
+        {view === "stats" && <StatsView cases={cases} />}
+      </div>
+    </div>
+  );
+}
+
+// Fasta ISO-vecko-/månadsgränser oberoende av lokal tidszonsdrift
+function bucketStart(date, granularity) {
+  if (granularity === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayIdx = (d.getDay() + 6) % 7; // måndag = 0
+  d.setDate(d.getDate() - dayIdx);
+  return d;
+}
+
+function nextBucket(date, granularity) {
+  return granularity === "month"
+    ? new Date(date.getFullYear(), date.getMonth() + 1, 1)
+    : new Date(date.getFullYear(), date.getMonth(), date.getDate() + 7);
+}
+
+// Ärenden per vecka om historiken är kort, annars per månad - båda med nollfyllda
+// luckor så tidslinjen ser hel ut även med få ärenden och skalar av sig själv.
+function buildTimeline(cases) {
+  const dated = cases
+    .map((c) => (c.created_at ? new Date(c.created_at) : null))
+    .filter((d) => d && !isNaN(d));
+  if (!dated.length) return { granularity: "week", data: [] };
+
+  const now = new Date();
+  const earliestMs = Math.min(...dated.map((d) => d.getTime()));
+  const spanDays = (now - earliestMs) / 86400000;
+  const granularity = spanDays > 70 ? "month" : "week";
+
+  const buckets = new Map();
+  let cursor = bucketStart(new Date(earliestMs), granularity);
+  const end = bucketStart(now, granularity);
+  let guard = 0;
+  while (cursor <= end && guard < 260) {
+    buckets.set(cursor.getTime(), { date: new Date(cursor), count: 0 });
+    cursor = nextBucket(cursor, granularity);
+    guard++;
+  }
+  dated.forEach((d) => {
+    const key = bucketStart(d, granularity).getTime();
+    if (buckets.has(key)) buckets.get(key).count += 1;
+  });
+
+  const data = Array.from(buckets.values()).map((b) => ({
+    label: granularity === "week"
+      ? b.date.toLocaleDateString("sv-SE", { day: "numeric", month: "short" })
+      : b.date.toLocaleDateString("sv-SE", { month: "short", year: "numeric" }),
+    count: b.count,
+  }));
+  return { granularity, data };
+}
+
+// Validerad kategorisk palett (dataviz-skillet), fast ordning - återanvänds inte
+// av statusfärgerna ovan så en produkttyp aldrig kan förväxlas med en status.
+const CATEGORICAL_PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+
+function EmptyStatCard({ text }) {
+  return (
+    <div style={{ color: "#7A8794", fontSize: 14, padding: "20px 0", textAlign: "center" }}>{text}</div>
+  );
+}
+
+function StatsView({ cases }) {
+  const total = cases.length;
+  const lostRemoteCount = cases.filter((c) => normalizeStatus(c.status) === "lost_remote").length;
+  const remotePct = total ? Math.round((lostRemoteCount / total) * 100) : null;
+
+  const produktCounts = new Map();
+  cases.forEach((c) => {
+    const key = c.produkttyp || "Okänd typ";
+    produktCounts.set(key, (produktCounts.get(key) || 0) + 1);
+  });
+  const produktData = Array.from(produktCounts.entries())
+    .map(([name, count]) => ({
+      name,
+      count,
+      pct: total ? Math.round((count / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .map((row, i) => ({ ...row, fill: CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length], labelText: `${row.count} (${row.pct}%)` }));
+
+  const timeline = buildTimeline(cases);
+  const timelineTitle = timeline.granularity === "week" ? "Ärenden per vecka" : "Ärenden per månad";
+
+  return (
+    <div>
+      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 32, marginBottom: 16, textAlign: "center" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
+          Löst helt på distans - utan besök av tekniker
+        </div>
+        <div style={{ fontSize: 72, fontWeight: 800, color: "#1E7A4D", lineHeight: 1.1, marginTop: 12 }}>
+          {remotePct !== null ? `${remotePct}%` : "–"}
+        </div>
+        <div style={{ fontSize: 15, color: "#37485A", marginTop: 8 }}>
+          {total
+            ? `${lostRemoteCount} av ${total} ärenden löstes direkt tillsammans med kunden, helt utan att en tekniker behövde åka ut.`
+            : "Inga ärenden registrerade ännu."}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+            🎯 Löst vid första besöket
+          </div>
+          <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
+            Går inte att beräkna tillförlitligt ännu - vi loggar inte historik över statusändringar,
+            så vi kan inte se om ett ärende gått tillbaka till ett tidigare steg (t.ex. bokad om på nytt).
+          </div>
+          <div style={{ marginTop: 12, background: "#F7F9FB", borderRadius: 8, padding: 12, fontSize: 13, color: "#37485A" }}>
+            Förslag: lägg till en kryssruta ("Löst vid första besöket?") som teknikern bockar i när
+            ärendet avslutas, så går måttet att räkna fram korrekt framöver.
+          </div>
+        </div>
+
+        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+            📦 Fördelning per produkttyp
+          </div>
+          {produktData.length === 0 ? (
+            <EmptyStatCard text="Inga ärenden att visa fördelning för än." />
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(produktData.length * 40, 80)}>
+              <BarChart data={produktData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
+                <CartesianGrid horizontal={false} stroke="#EDEFF1" />
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 12, fill: "#37485A" }}
+                  axisLine={{ stroke: "#E2E6EA" }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "#F7F9FB" }}
+                  formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+                />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                  {produktData.map((row) => (
+                    <Cell key={row.name} fill={row.fill} />
+                  ))}
+                  <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+          🗓 {timelineTitle}
+        </div>
+        {timeline.data.length === 0 ? (
+          <EmptyStatCard text="Inga ärenden att visa volym för än." />
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={timeline.data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+              <CartesianGrid vertical={false} stroke="#EDEFF1" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: "#7A8794" }}
+                axisLine={{ stroke: "#E2E6EA" }}
+                tickLine={false}
+                interval={timeline.data.length > 12 ? "preserveStartEnd" : 0}
+              />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#7A8794" }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip
+                cursor={{ fill: "#F7F9FB" }}
+                formatter={(v) => [`${v} ärenden`, ""]}
+                contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+              />
+              <Bar dataKey="count" fill="#2C5A82" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
