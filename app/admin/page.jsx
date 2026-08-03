@@ -358,12 +358,12 @@ function nextBucket(date, granularity) {
 // luckor så tidslinjen ser hel ut även med få ärenden och skalar av sig själv.
 function buildTimeline(cases) {
   const dated = cases
-    .map((c) => (c.created_at ? new Date(c.created_at) : null))
-    .filter((d) => d && !isNaN(d));
+    .map((c) => (c.created_at ? { case: c, date: new Date(c.created_at) } : null))
+    .filter((d) => d && !isNaN(d.date));
   if (!dated.length) return { granularity: "week", data: [] };
 
   const now = new Date();
-  const earliestMs = Math.min(...dated.map((d) => d.getTime()));
+  const earliestMs = Math.min(...dated.map((d) => d.date.getTime()));
   const spanDays = (now - earliestMs) / 86400000;
   const granularity = spanDays > 70 ? "month" : "week";
 
@@ -372,20 +372,28 @@ function buildTimeline(cases) {
   const end = bucketStart(now, granularity);
   let guard = 0;
   while (cursor <= end && guard < 260) {
-    buckets.set(cursor.getTime(), { date: new Date(cursor), count: 0 });
+    buckets.set(cursor.getTime(), { date: new Date(cursor), count: 0, cases: [] });
     cursor = nextBucket(cursor, granularity);
     guard++;
   }
-  dated.forEach((d) => {
+  dated.forEach(({ case: c, date: d }) => {
     const key = bucketStart(d, granularity).getTime();
-    if (buckets.has(key)) buckets.get(key).count += 1;
+    if (buckets.has(key)) {
+      const b = buckets.get(key);
+      b.count += 1;
+      b.cases.push(c);
+    }
   });
 
-  const data = Array.from(buckets.values()).map((b) => ({
+  // "key" identifierar bucketen entydigt (vecko-/månadsstart i ms) - används för
+  // klick-/urvalslogik i veckodiagrammet, oberoende av den visade textetiketten.
+  const data = Array.from(buckets.entries()).map(([key, b]) => ({
+    key,
     label: granularity === "week"
       ? b.date.toLocaleDateString("sv-SE", { day: "numeric", month: "short" })
       : b.date.toLocaleDateString("sv-SE", { month: "short", year: "numeric" }),
     count: b.count,
+    cases: b.cases,
   }));
   return { granularity, data };
 }
@@ -536,6 +544,7 @@ const STATS_TABS = [
 function StatsView({ cases }) {
   const [statsTab, setStatsTab] = useState("overview");
   const [selectedModel, setSelectedModel] = useState(null);
+  const [selectedWeek, setSelectedWeek] = useState(null);
   const total = cases.length;
   const lostRemoteCount = cases.filter((c) => normalizeStatus(c.status) === "lost_remote").length;
   const remotePct = total ? Math.round((lostRemoteCount / total) * 100) : null;
@@ -556,6 +565,7 @@ function StatsView({ cases }) {
 
   const timeline = buildTimeline(cases);
   const timelineTitle = timeline.granularity === "week" ? "Ärenden per vecka" : "Ärenden per månad";
+  const selectedWeekBucket = selectedWeek !== null ? timeline.data.find((d) => d.key === selectedWeek) : null;
 
   // "loest_forsta_besoket" bockas i av teknikern per ärende - null/undefined betyder
   // "inte ifyllt än", så de räknas inte in i måttet (varken som lyckat eller misslyckat).
@@ -611,52 +621,57 @@ function StatsView({ cases }) {
 
       {statsTab === "overview" && (
         <>
-          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 32, marginBottom: 16, textAlign: "center" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
-              Löst helt på distans - utan besök av tekniker
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 28, textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                Löst helt på distans
+              </div>
+              <div style={{ fontSize: 56, fontWeight: 800, color: "#1E7A4D", lineHeight: 1.1, marginTop: 10 }}>
+                {remotePct !== null ? `${remotePct}%` : "–"}
+              </div>
+              <div style={{ fontSize: 13, color: "#37485A", marginTop: 8 }}>
+                {total
+                  ? `${lostRemoteCount} av ${total} ärenden löstes direkt med kunden, utan att en tekniker behövde åka ut.`
+                  : "Inga ärenden registrerade ännu."}
+              </div>
             </div>
-            <div style={{ fontSize: 72, fontWeight: 800, color: "#1E7A4D", lineHeight: 1.1, marginTop: 12 }}>
-              {remotePct !== null ? `${remotePct}%` : "–"}
-            </div>
-            <div style={{ fontSize: 15, color: "#37485A", marginTop: 8 }}>
-              {total
-                ? `${lostRemoteCount} av ${total} ärenden löstes direkt tillsammans med kunden, helt utan att en tekniker behövde åka ut.`
-                : "Inga ärenden registrerade ännu."}
-            </div>
-          </div>
 
-          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-              🎯 Löst vid första besöket
-            </div>
-            {singleVisitPct === null ? (
-              <>
-                <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
+            <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 28, textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
+                🎯 Löst vid första besöket
+              </div>
+              {singleVisitPct === null ? (
+                <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6, marginTop: 16 }}>
                   Ingen data ännu - teknikern bockar i "Löst vid första besöket" i ärendets detaljvy
                   när ett ärende avslutas, och måttet börjar fyllas i här automatiskt.
                 </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 48, fontWeight: 800, color: "#2C5A82", lineHeight: 1.1 }}>
-                  {singleVisitPct}%
-                </div>
-                <div style={{ fontSize: 13, color: "#37485A", marginTop: 4 }}>
-                  {singleVisitTrue} av {singleVisitMarked.length} ärenden löstes utan återbesök.
-                  Baseras på ärenden där detta är ifyllt av teknikern.
-                </div>
-              </>
-            )}
+              ) : (
+                <>
+                  <div style={{ fontSize: 56, fontWeight: 800, color: "#2C5A82", lineHeight: 1.1, marginTop: 10 }}>
+                    {singleVisitPct}%
+                  </div>
+                  <div style={{ fontSize: 13, color: "#37485A", marginTop: 8 }}>
+                    {singleVisitTrue} av {singleVisitMarked.length} ärenden löstes utan återbesök.
+                    Baseras på ärenden där detta är ifyllt av teknikern.
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 4 }}>
               🗓 {timelineTitle}
             </div>
+            {timeline.data.length > 0 && (
+              <div style={{ fontSize: 12, color: "#9AA6B1", marginBottom: 12 }}>
+                Klicka på en stapel för att se ärendena den {timeline.granularity === "week" ? "veckan" : "månaden"}.
+              </div>
+            )}
             {timeline.data.length === 0 ? (
               <EmptyStatCard text="Inga ärenden att visa volym för än." />
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={timeline.data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                   <CartesianGrid vertical={false} stroke="#EDEFF1" />
                   <XAxis
@@ -672,9 +687,58 @@ function StatsView({ cases }) {
                     formatter={(v) => [`${v} ärenden`, ""]}
                     contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
                   />
-                  <Bar dataKey="count" fill="#2C5A82" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar
+                    dataKey="count"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={28}
+                    onClick={(row) => setSelectedWeek(row.key)}
+                    activeBar={{ fill: "#1c3f5c" }}
+                  >
+                    {timeline.data.map((row) => (
+                      <Cell
+                        key={row.key}
+                        fill={row.key === selectedWeek ? "#1c3f5c" : selectedWeek !== null ? "#C9D5DE" : "#2C5A82"}
+                        style={{ cursor: "pointer", transition: "fill 0.2s ease" }}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
+            )}
+
+            {selectedWeekBucket && (
+              <div style={{ marginTop: 16, borderTop: "1px solid #EAEEF2", paddingTop: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                    Ärenden {timeline.granularity === "week" ? "vecka" : "månad"} {selectedWeekBucket.label}
+                    {" "}({selectedWeekBucket.count})
+                  </div>
+                  <button
+                    onClick={() => setSelectedWeek(null)}
+                    style={{ background: "none", border: "none", color: "#2C5A82", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0 }}
+                  >
+                    ✕ Visa alla veckor
+                  </button>
+                </div>
+                {selectedWeekBucket.cases.length === 0 ? (
+                  <EmptyStatCard text="Inga ärenden registrerade den här perioden." />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {selectedWeekBucket.cases.map((c) => {
+                      const statusMeta = STATUS_OPTIONS.find((o) => o.value === normalizeStatus(c.status));
+                      return (
+                        <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#F7F9FB", borderRadius: 8 }}>
+                          <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#111827" }}>{c.kund_namn || "Okänd kund"}</div>
+                          <div style={{ fontSize: 12, color: "#7A8794", width: 130, flexShrink: 0 }}>{c.produkttyp || "—"}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: statusMeta.color, background: statusMeta.bg, borderRadius: 10, padding: "2px 10px", flexShrink: 0, whiteSpace: "nowrap" }}>
+                            {statusMeta.label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </>
