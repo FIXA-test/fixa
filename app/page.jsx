@@ -196,6 +196,43 @@ const IOT_ALERTS = [
   { sn: "SN 445 019 220", modell: "Siemens WQ42G200DN (torktumlare)", signal: "Kondensorns luftflöde faller — trolig luddansamling", risk: "Låg", dagar: "Rengöring räcker troligen", atgard: "Säker frontåtgärd: push med guide för att rengöra luddfiltret i dörren (verktygsfritt, avsett för användaren)." },
 ];
 
+// Telefonkamerabilder kommer ofta in på 10-15MB rakt av - skalas ner och
+// komprimeras till JPEG client-side innan de någonsin når servern. 1600px är
+// gott om upplösning för att läsa av en typskylt/felkod men håller filstorleken
+// nere. MAX_UPLOAD_BASE64_BYTES lämnar rejäl marginal under Vercels hårda
+// 4,5MB-gräns för hela request-body:n (system-prompt + historik + bilden).
+const MAX_IMAGE_DIMENSION = 1600;
+const JPEG_QUALITY = 0.82;
+const MAX_UPLOAD_BASE64_BYTES = 3.5 * 1024 * 1024;
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+        const scale = MAX_IMAGE_DIMENSION / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas stöds inte i den här webbläsaren")); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Kunde inte läsa bilden"));
+    };
+    img.src = objectUrl;
+  });
+}
+
 function parseCase(text) {
   const m = text.match(/⟦CASE⟧([\s\S]*?)⟦\/CASE⟧/);
   let data = null;
@@ -398,39 +435,37 @@ export default function FixaTriageV7() {
     if (fileRef.current) fileRef.current.click();
   };
   const onPickFile = (e) => {
-    const file = e.target.files && e.target.files[0];
+    const inputEl = e.target;
+    const file = inputEl.files && inputEl.files[0];
     if (!file) return;
-    // Claude API stöder bara jpeg, png, gif, webp - inte heic/heif från iPhone
-    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
-    let mediaType = (file.type || "").toLowerCase();
-    if (!allowed.includes(mediaType)) {
-      // Kolla filändelse som fallback
-      const name = (file.name || "").toLowerCase();
-      if (name.endsWith(".jpg") || name.endsWith(".jpeg")) mediaType = "image/jpeg";
-      else if (name.endsWith(".png")) mediaType = "image/png";
-      else if (name.endsWith(".webp")) mediaType = "image/webp";
-      else if (name.endsWith(".gif")) mediaType = "image/gif";
-      else {
-        setError("Bildformat stöds inte. Ta ett nytt foto eller använd JPG/PNG.");
-        e.target.value = "";
-        return;
-      }
+
+    // HEIC/HEIF (standard på iPhone) går inte att avkoda i webbläsaren för
+    // komprimering - be om ett vanligt foto istället innan vi ens försöker.
+    const name = (file.name || "").toLowerCase();
+    const type = (file.type || "").toLowerCase();
+    const looksLikeHeic = type.includes("heic") || type.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
+    const looksLikeImage = type.startsWith("image/") || /\.(jpe?g|png|webp|gif)$/.test(name);
+    if (looksLikeHeic || !looksLikeImage) {
+      setError("Bildformat stöds inte. Ta bilden i vanligt foto-format (JPG/PNG) eller beskriv problemet med ord istället.");
+      inputEl.value = "";
+      return;
     }
-    if (mediaType === "image/jpg") mediaType = "image/jpeg";
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
-      const base64 = dataUrl.split(",")[1];
-      // Kolla storlek (Claude API: max ~5MB per bild i base64)
-      if (base64.length > 5 * 1024 * 1024) {
-        setError("Bilden är för stor. Ta en ny bild med lägre upplösning.");
-        e.target.value = "";
-        return;
-      }
-      setPendingImage({ data: base64, mediaType, preview: dataUrl });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+
+    compressImage(file)
+      .then((dataUrl) => {
+        const base64 = dataUrl.split(",")[1];
+        if (base64.length > MAX_UPLOAD_BASE64_BYTES) {
+          setError("Bilden är för stor även efter komprimering. Prova en annan bild, eller beskriv problemet med ord istället så hjälper jag dig ändå.");
+          return;
+        }
+        setPendingImage({ data: base64, mediaType: "image/jpeg", preview: dataUrl });
+      })
+      .catch(() => {
+        setError("Kunde inte läsa bilden. Prova en annan bild eller beskriv problemet med ord istället.");
+      })
+      .finally(() => {
+        inputEl.value = "";
+      });
   };
 
   const send = async (text) => {
@@ -462,7 +497,20 @@ export default function FixaTriageV7() {
     // webbsökning efter felkod en trolig anledning, så vi byter text i indikatorn.
     searchTimerRef.current = setTimeout(() => setSearching(true), 3500);
     try {
-      const apiMessages = nextMessages.map((m) => ({ role: m.role, content: m.raw ?? m.content }));
+      // Skickar bara bilddata för det senaste meddelandet - äldre bilder i
+      // historiken skulle annars skickas om på varje nytt anrop (FIXA har redan
+      // analyserat och svarat på dem, texten räcker för att behålla kontexten).
+      // Utan detta växer varje request tills den passerar Vercels gräns för hur
+      // stor en serverless functions request-body får vara, efter bara ett par
+      // bilder i samma konversation.
+      const lastIndex = nextMessages.length - 1;
+      const apiMessages = nextMessages.map((m, i) => {
+        if (i !== lastIndex && m.role === "user" && Array.isArray(m.raw)) {
+          const textBlock = m.raw.find((block) => block.type === "text");
+          return { role: m.role, content: textBlock ? textBlock.text : m.content };
+        }
+        return { role: m.role, content: m.raw ?? m.content };
+      });
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -498,12 +546,16 @@ export default function FixaTriageV7() {
         : "Jag hörde dig – berätta gärna lite mer om vad som händer, så hjälper jag dig vidare.");
       setMessages((prev) => [...prev, { role: "assistant", content: displayText, raw: fullText }]);
     } catch (e) {
-      const isBildProblem = e.message && e.message.includes("400");
-      const msg = isBildProblem
-        ? "Kunde inte läsa bilden – den kan vara i fel format. Prova att ta en ny bild eller skriv frågan utan bild."
-        : "Ursäkta – jag fick problem att svara just nu. Kan du försöka igen? Om det fortsätter, ring oss direkt så hjälper vi dig personligen.";
+      // Visar aldrig tekniska statuskoder för kunden - bara vänliga, konkreta
+      // förslag på hur de kan gå vidare.
+      const status = (e.message && e.message.match(/API-fel (\d+)/) || [])[1];
+      const msg =
+        status === "413"
+          ? "Bilden är för stor för att skickas, tyvärr. Prova gärna en mindre bild, eller beskriv problemet med ord istället så hjälper jag dig direkt."
+          : status === "400"
+          ? "Kunde inte läsa bilden – den kan vara i fel format. Prova att ta en ny bild eller skriv frågan utan bild."
+          : "Ursäkta – jag fick problem att svara just nu. Kan du försöka igen? Om det fortsätter, ring oss direkt så hjälper vi dig personligen.";
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      setError(e.message || "Kunde inte nå assistenten. Försök igen.");
     } finally {
       clearTimeout(searchTimerRef.current);
       setSearching(false);
