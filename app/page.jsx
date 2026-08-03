@@ -268,7 +268,7 @@ export default function FixaTriageV7() {
   const [view, setView] = useState("kund");
 
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hej! Jag är FIXA, en AI som hjälper dig felsöka vitvaror — lite som en kunnig granne, fast tillgänglig dygnet runt. Berätta vad som krånglar så tar vi det därifrån tillsammans. Bifoga gärna en bild på typskylten/modellnumret om du har den till hands (📷)" },
+    { role: "assistant", content: "Hej! Jag är FIXA, en AI som hjälper dig felsöka vitvaror. Berätta vad som krånglar så tar vi det därifrån tillsammans. Bifoga gärna en bild på typskylten/modellnumret om du har den till hands (📷)" },
   ]);
   const [input, setInput] = useState("");
   const [pendingImage, setPendingImage] = useState(null); // {data, mediaType, preview, isReceipt}
