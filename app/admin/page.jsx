@@ -419,18 +419,31 @@ function groupCases(cases, keyFn) {
   return Array.from(groups.values());
 }
 
-function RankedList({ rows, emptyText }) {
+function RankedList({ rows, emptyText, onRowClick, total }) {
   if (rows.length === 0) return <EmptyStatCard text={emptyText} />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {rows.map((row, i) => (
-        <div key={row.name} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div
+          key={row.name}
+          onClick={onRowClick ? () => onRowClick(row) : undefined}
+          style={{
+            display: "flex", alignItems: "flex-start", gap: 10,
+            cursor: onRowClick ? "pointer" : "default",
+            borderRadius: 8, padding: onRowClick ? "6px 8px" : 0, margin: onRowClick ? "-6px -8px" : 0,
+            transition: "background 0.1s",
+          }}
+          onMouseEnter={onRowClick ? (e) => (e.currentTarget.style.background = "#F7F9FB") : undefined}
+          onMouseLeave={onRowClick ? (e) => (e.currentTarget.style.background = "transparent") : undefined}
+        >
           <div style={{ width: 18, fontSize: 12, fontWeight: 700, color: "#9AA6B1", textAlign: "right", flexShrink: 0, marginTop: 1 }}>
             {i + 1}
           </div>
-          <div style={{ flex: 1, fontSize: 13, color: "#37485A", lineHeight: 1.5 }}>{row.name}</div>
+          <div style={{ flex: 1, fontSize: 13, color: onRowClick ? "#2C5A82" : "#37485A", lineHeight: 1.5, fontWeight: onRowClick ? 600 : 400 }}>
+            {row.name}
+          </div>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#2C5A82", background: "#E7EFF6", borderRadius: 10, padding: "2px 10px", flexShrink: 0, whiteSpace: "nowrap" }}>
-            {row.count} {row.count === 1 ? "ärende" : "ärenden"}
+            {total ? `${row.count} av ${total} ärenden` : `${row.count} ${row.count === 1 ? "ärende" : "ärenden"}`}
           </div>
         </div>
       ))}
@@ -438,7 +451,84 @@ function RankedList({ rows, emptyText }) {
   );
 }
 
+// Modellens detaljvy i "Vanligaste modeller" - trolig_orsak/reservdel grupperas på
+// exakt textmatchning (samma mönster som groupCases()/RankedList ovan). Det fungerar
+// bra så fort samma formulering återkommer, men i skarp drift skriver FIXA:s AI
+// dessa fält som fri text per samtal, så exakta dubbletter blir sällsynta tills
+// volymen är riktigt hög. De faktiska symptombeskrivningarna listas därför alltid
+// som citat rakt av - det ger ett konkret underlag oavsett hur väl orsak/reservdel
+// råkar matcha ord för ord.
+function ModelDetail({ group, onBack }) {
+  if (!group) return null;
+  const modelCases = group.cases;
+  const total = modelCases.length;
+
+  const orsakData = groupCases(modelCases, (c) => (c.trolig_orsak || "").trim() || null)
+    .map((g) => ({ name: g.key, count: g.count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const reservdelData = groupCases(modelCases, (c) => (c.reservdel || "").trim() || null)
+    .map((g) => ({ name: g.key, count: g.count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const symptoms = modelCases
+    .filter((c) => (c.symptom || "").trim())
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, 5)
+    .map((c) => c.symptom.trim());
+
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        style={{ background: "none", border: "none", color: "#2C5A82", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 14 }}
+      >
+        ← Tillbaka till modeller
+      </button>
+
+      <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{group.key}</div>
+      <div style={{ fontSize: 13, color: "#7A8794", marginTop: 2, marginBottom: 18 }}>
+        {total} {total === 1 ? "ärende" : "ärenden"} totalt
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+          Vanligaste trolig orsak
+        </div>
+        <RankedList rows={orsakData} emptyText="Ingen bedömd orsak registrerad för denna modell än." total={total} />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+          Vanligaste reservdel
+        </div>
+        <RankedList rows={reservdelData} emptyText="Ingen reservdel registrerad för denna modell än." total={total} />
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+          Kundernas egna beskrivningar
+        </div>
+        {symptoms.length === 0 ? (
+          <EmptyStatCard text="Inga symptombeskrivningar registrerade för denna modell än." />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {symptoms.map((s, i) => (
+              <div key={i} style={{ fontSize: 13, color: "#37485A", lineHeight: 1.5, background: "#F7F9FB", borderRadius: 8, padding: "8px 12px" }}>
+                "{s}"
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatsView({ cases }) {
+  const [selectedModel, setSelectedModel] = useState(null);
   const total = cases.length;
   const lostRemoteCount = cases.filter((c) => normalizeStatus(c.status) === "lost_remote").length;
   const remotePct = total ? Math.round((lostRemoteCount / total) * 100) : null;
@@ -482,10 +572,11 @@ function StatsView({ cases }) {
     fill: CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length],
   })).map((row) => ({ ...row, labelText: `${row.count} (${row.pct}%)` }));
 
-  const modelData = groupCases(cases, (c) => (c.marke && c.modell ? `${c.marke} ${c.modell}` : null))
-    .map((g) => ({ name: g.key, count: g.count }))
+  const modelGroups = groupCases(cases, (c) => (c.marke && c.modell ? `${c.marke} ${c.modell}` : null))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
+  const modelData = modelGroups.map((g) => ({ name: g.key, count: g.count }));
+  const selectedModelGroup = selectedModel ? modelGroups.find((g) => g.key === selectedModel) : null;
 
   const orsakData = groupCases(cases, (c) => (c.trolig_orsak || "").trim() || null)
     .map((g) => ({ name: g.key, count: g.count }))
@@ -635,10 +726,16 @@ function StatsView({ cases }) {
         </div>
 
         <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-            🔩 Vanligaste modeller
-          </div>
-          <RankedList rows={modelData} emptyText="Inga modelldata att visa än." />
+          {selectedModel ? (
+            <ModelDetail group={selectedModelGroup} onBack={() => setSelectedModel(null)} />
+          ) : (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+                🔩 Vanligaste modeller
+              </div>
+              <RankedList rows={modelData} emptyText="Inga modelldata att visa än." onRowClick={(row) => setSelectedModel(row.name)} />
+            </>
+          )}
         </div>
       </div>
 
