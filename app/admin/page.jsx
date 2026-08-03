@@ -400,6 +400,44 @@ function EmptyStatCard({ text }) {
   );
 }
 
+// Generisk gruppering: räknar ärenden per nyckel (märke, modell, orsak, ...) och
+// behåller de underliggande ärendena i varje grupp (g.cases). En framtida
+// kostnadsdimension (t.ex. ÅTA-tid eller reservdelspris per ärende) kan då
+// summeras direkt ovanpå samma gruppering - t.ex.
+// g.cases.reduce((sum, c) => sum + (c.reservdelskostnad || 0), 0) - utan att
+// grupperingslogiken i sig behöver ändras.
+function groupCases(cases, keyFn) {
+  const groups = new Map();
+  cases.forEach((c) => {
+    const key = keyFn(c);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, { key, count: 0, cases: [] });
+    const g = groups.get(key);
+    g.count += 1;
+    g.cases.push(c);
+  });
+  return Array.from(groups.values());
+}
+
+function RankedList({ rows, emptyText }) {
+  if (rows.length === 0) return <EmptyStatCard text={emptyText} />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {rows.map((row, i) => (
+        <div key={row.name} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ width: 18, fontSize: 12, fontWeight: 700, color: "#9AA6B1", textAlign: "right", flexShrink: 0, marginTop: 1 }}>
+            {i + 1}
+          </div>
+          <div style={{ flex: 1, fontSize: 13, color: "#37485A", lineHeight: 1.5 }}>{row.name}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#2C5A82", background: "#E7EFF6", borderRadius: 10, padding: "2px 10px", flexShrink: 0, whiteSpace: "nowrap" }}>
+            {row.count} {row.count === 1 ? "ärende" : "ärenden"}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatsView({ cases }) {
   const total = cases.length;
   const lostRemoteCount = cases.filter((c) => normalizeStatus(c.status) === "lost_remote").length;
@@ -427,6 +465,32 @@ function StatsView({ cases }) {
   const singleVisitMarked = cases.filter((c) => c.loest_forsta_besoket === true || c.loest_forsta_besoket === false);
   const singleVisitTrue = singleVisitMarked.filter((c) => c.loest_forsta_besoket === true).length;
   const singleVisitPct = singleVisitMarked.length ? Math.round((singleVisitTrue / singleVisitMarked.length) * 100) : null;
+
+  // Märkes- och modellfördelning - grupperad med groupCases() ovan så en framtida
+  // kostnadskolumn (ÅTA-tid, reservdelspris) kan summeras per grupp utan omstrukturering.
+  const MAX_BRAND_SLOTS = 8;
+  const markeGroups = groupCases(cases, (c) => c.marke || "Okänt märke")
+    .map((g) => ({ name: g.key, count: g.count }))
+    .sort((a, b) => b.count - a.count);
+  const markeRest = markeGroups.slice(MAX_BRAND_SLOTS - 1).reduce((sum, r) => sum + r.count, 0);
+  const markeData = (markeGroups.length > MAX_BRAND_SLOTS
+    ? [...markeGroups.slice(0, MAX_BRAND_SLOTS - 1), { name: "Övriga märken", count: markeRest }]
+    : markeGroups
+  ).map((row, i) => ({
+    ...row,
+    pct: total ? Math.round((row.count / total) * 100) : 0,
+    fill: CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length],
+  })).map((row) => ({ ...row, labelText: `${row.count} (${row.pct}%)` }));
+
+  const modelData = groupCases(cases, (c) => (c.marke && c.modell ? `${c.marke} ${c.modell}` : null))
+    .map((g) => ({ name: g.key, count: g.count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  const orsakData = groupCases(cases, (c) => (c.trolig_orsak || "").trim() || null)
+    .map((g) => ({ name: g.key, count: g.count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
 
   return (
     <div>
@@ -532,6 +596,57 @@ function StatsView({ cases }) {
             </BarChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16, marginBottom: 16 }}>
+        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+            🏷 Ärenden per märke
+          </div>
+          {markeData.length === 0 ? (
+            <EmptyStatCard text="Inga ärenden att visa märkesfördelning för än." />
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(markeData.length * 40, 80)}>
+              <BarChart data={markeData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
+                <CartesianGrid horizontal={false} stroke="#EDEFF1" />
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 12, fill: "#37485A" }}
+                  axisLine={{ stroke: "#E2E6EA" }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "#F7F9FB" }}
+                  formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+                />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                  {markeData.map((row) => (
+                    <Cell key={row.name} fill={row.fill} />
+                  ))}
+                  <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+            🔩 Vanligaste modeller
+          </div>
+          <RankedList rows={modelData} emptyText="Inga modelldata att visa än." />
+        </div>
+      </div>
+
+      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+          🧠 Vanligaste trolig orsak
+        </div>
+        <RankedList rows={orsakData} emptyText="Inga bedömda orsaker att visa än." />
       </div>
     </div>
   );
