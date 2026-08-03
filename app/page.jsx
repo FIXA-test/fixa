@@ -106,10 +106,11 @@ Avsluta VARJE svar med exakt en rad:
 - Tomma strängar tills du vet. Fyll i butik/ordernr/inkopsdatum/garanti_kvitto när kunden laddat upp ett kvitto. Fyll i ALLA kunduppgifter (namn, personnr, adress, telefon, epost) när du fått dem — obligatoriskt innan status "tekniker". "rot_avdrag" sätts till "ja" eller "nej" när kunden svarat, lämna tomt om ärendet är inom garanti. Lämna "felkod" tom för apparater utan felkoder. status "lost" = kunden bekräftat att en SÄKER yttre åtgärd löste det. status "tekniker" = besök krävs — kräver ifyllda kunduppgifter. CASE-fälten alltid på svenska. "reservdel" är den del teknikern beställer och monterar — föreslå aldrig något som kunden ska köpa själv.`;
 
 const QUICK_STARTS = [
-  "Tvättmaskinen tömmer inte vatten",
+  "Tvättmaskinen tar inte in vatten",
   "Diskmaskinen diskar inte rent",
-  "Kylen blir inte kall",
-  "Ugnen blir inte varm",
+  "Kylskåpet håller inte rätt temperatur",
+  "Frysen bildar mycket is",
+  "Torktumlaren torkar inte",
 ];
 
 const STATUS_META = {
@@ -267,7 +268,7 @@ export default function FixaTriageV7() {
   const [view, setView] = useState("kund");
 
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hej! Jag hjälper dig felsöka din vitvara. Beskriv gärna vad som krånglar så tar vi det därifrån. Bifoga gärna en bild på typskylten/modellnumret (📷)" },
+    { role: "assistant", content: "Hej! Jag är FIXA, en AI som hjälper dig felsöka vitvaror — lite som en kunnig granne, fast tillgänglig dygnet runt. Berätta vad som krånglar så tar vi det därifrån tillsammans. Bifoga gärna en bild på typskylten/modellnumret om du har den till hands (📷)" },
   ]);
   const [input, setInput] = useState("");
   const [pendingImage, setPendingImage] = useState(null); // {data, mediaType, preview, isReceipt}
@@ -693,7 +694,7 @@ fetch("/api/chat/save-case", {  method: "POST",
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#FFF", lineHeight: 1.2 }}>FIXA</div>
                 <div style={{ fontSize: 12, color: "#B5D0E8", display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }}></span>
-                  Din felsökningsassistent
+                  Din AI-assistent för vitvaror
                 </div>
               </div>
             </div>
@@ -826,10 +827,15 @@ fetch("/api/chat/save-case", {  method: "POST",
             </div>
 
             {!caseData.produkttyp && caseData.status === "pagar" && (
-              <div style={{ padding: "0 18px 12px", display: "flex", gap: 8, flexWrap: "wrap", background: "#FFFFFF" }}>
-                {QUICK_STARTS.map((q) => (
-                  <button key={q} onClick={() => send(q)} style={{ border: "1px solid #E2E6EA", background: "#F7F9FB", color: "#2C5A82", borderRadius: 20, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{q}</button>
-                ))}
+              <div style={{ padding: "0 18px 14px", background: "#FFFFFF" }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {QUICK_STARTS.map((q) => (
+                    <button key={q} onClick={() => send(q)} style={{ border: "1px solid #E2E6EA", background: "#F7F9FB", color: "#2C5A82", borderRadius: 20, padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{q}</button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#9AA6B1", textAlign: "center", marginTop: 10 }}>
+                  Eller beskriv ditt problem med egna ord nedan ↓
+                </div>
               </div>
             )}
 
