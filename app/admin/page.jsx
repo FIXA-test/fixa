@@ -107,6 +107,19 @@ export default function AdminPage() {
     }
   };
 
+  const updateSingleVisit = async (caseId, value) => {
+    const prevCases = cases;
+    const prevSelected = selected;
+    setCases((cs) => cs.map((c) => (c.id === caseId ? { ...c, loest_forsta_besoket: value } : c)));
+    setSelected((s) => (s && s.id === caseId ? { ...s, loest_forsta_besoket: value } : s));
+    const { error } = await supabase.from("cases").update({ loest_forsta_besoket: value }).eq("id", caseId);
+    if (error) {
+      console.error("Kunde inte uppdatera löst vid första besöket:", error);
+      setCases(prevCases);
+      setSelected(prevSelected);
+    }
+  };
+
   // Produkttyper som faktiskt förekommer i ärendena — ingen hårdkodad lista att hålla i synk
   const produkttyper = Array.from(new Set(cases.map((c) => c.produkttyp).filter(Boolean))).sort();
 
@@ -274,6 +287,15 @@ export default function AdminPage() {
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: "#37485A", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!selected.loest_forsta_besoket}
+                    onChange={(e) => updateSingleVisit(selected.id, e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                  />
+                  Löst vid första besöket (inga återbesök krävdes)
+                </label>
               </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📞 Kontakt</div>
@@ -400,6 +422,12 @@ function StatsView({ cases }) {
   const timeline = buildTimeline(cases);
   const timelineTitle = timeline.granularity === "week" ? "Ärenden per vecka" : "Ärenden per månad";
 
+  // "loest_forsta_besoket" bockas i av teknikern per ärende - null/undefined betyder
+  // "inte ifyllt än", så de räknas inte in i måttet (varken som lyckat eller misslyckat).
+  const singleVisitMarked = cases.filter((c) => c.loest_forsta_besoket === true || c.loest_forsta_besoket === false);
+  const singleVisitTrue = singleVisitMarked.filter((c) => c.loest_forsta_besoket === true).length;
+  const singleVisitPct = singleVisitMarked.length ? Math.round((singleVisitTrue / singleVisitMarked.length) * 100) : null;
+
   return (
     <div>
       <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 32, marginBottom: 16, textAlign: "center" }}>
@@ -421,14 +449,24 @@ function StatsView({ cases }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
             🎯 Löst vid första besöket
           </div>
-          <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
-            Går inte att beräkna tillförlitligt ännu - vi loggar inte historik över statusändringar,
-            så vi kan inte se om ett ärende gått tillbaka till ett tidigare steg (t.ex. bokad om på nytt).
-          </div>
-          <div style={{ marginTop: 12, background: "#F7F9FB", borderRadius: 8, padding: 12, fontSize: 13, color: "#37485A" }}>
-            Förslag: lägg till en kryssruta ("Löst vid första besöket?") som teknikern bockar i när
-            ärendet avslutas, så går måttet att räkna fram korrekt framöver.
-          </div>
+          {singleVisitPct === null ? (
+            <>
+              <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
+                Ingen data ännu - teknikern bockar i "Löst vid första besöket" i ärendets detaljvy
+                när ett ärende avslutas, och måttet börjar fyllas i här automatiskt.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 48, fontWeight: 800, color: "#2C5A82", lineHeight: 1.1 }}>
+                {singleVisitPct}%
+              </div>
+              <div style={{ fontSize: 13, color: "#37485A", marginTop: 4 }}>
+                {singleVisitTrue} av {singleVisitMarked.length} ärenden löstes utan återbesök.
+                Baseras på ärenden där detta är ifyllt av teknikern.
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
