@@ -527,7 +527,14 @@ function ModelDetail({ group, onBack }) {
   );
 }
 
+const STATS_TABS = [
+  { key: "overview", label: "Översikt" },
+  { key: "product-brand", label: "Produkt & märke" },
+  { key: "models-causes", label: "Modeller & orsaker" },
+];
+
 function StatsView({ cases }) {
+  const [statsTab, setStatsTab] = useState("overview");
   const [selectedModel, setSelectedModel] = useState(null);
   const total = cases.length;
   const lostRemoteCount = cases.filter((c) => normalizeStatus(c.status) === "lost_remote").length;
@@ -585,166 +592,191 @@ function StatsView({ cases }) {
 
   return (
     <div>
-      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 32, marginBottom: 16, textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
-          Löst helt på distans - utan besök av tekniker
-        </div>
-        <div style={{ fontSize: 72, fontWeight: 800, color: "#1E7A4D", lineHeight: 1.1, marginTop: 12 }}>
-          {remotePct !== null ? `${remotePct}%` : "–"}
-        </div>
-        <div style={{ fontSize: 15, color: "#37485A", marginTop: 8 }}>
-          {total
-            ? `${lostRemoteCount} av ${total} ärenden löstes direkt tillsammans med kunden, helt utan att en tekniker behövde åka ut.`
-            : "Inga ärenden registrerade ännu."}
-        </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {STATS_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setStatsTab(t.key)}
+            style={{
+              padding: "8px 18px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700,
+              border: statsTab === t.key ? "1px solid #2C5A82" : "1px solid #E2E6EA",
+              background: statsTab === t.key ? "#2C5A82" : "#FFF",
+              color: statsTab === t.key ? "#FFF" : "#37485A",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-            🎯 Löst vid första besöket
+      {statsTab === "overview" && (
+        <>
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 32, marginBottom: 16, textAlign: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", letterSpacing: 0.3 }}>
+              Löst helt på distans - utan besök av tekniker
+            </div>
+            <div style={{ fontSize: 72, fontWeight: 800, color: "#1E7A4D", lineHeight: 1.1, marginTop: 12 }}>
+              {remotePct !== null ? `${remotePct}%` : "–"}
+            </div>
+            <div style={{ fontSize: 15, color: "#37485A", marginTop: 8 }}>
+              {total
+                ? `${lostRemoteCount} av ${total} ärenden löstes direkt tillsammans med kunden, helt utan att en tekniker behövde åka ut.`
+                : "Inga ärenden registrerade ännu."}
+            </div>
           </div>
-          {singleVisitPct === null ? (
-            <>
-              <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
-                Ingen data ännu - teknikern bockar i "Löst vid första besöket" i ärendets detaljvy
-                när ett ärende avslutas, och måttet börjar fyllas i här automatiskt.
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 48, fontWeight: 800, color: "#2C5A82", lineHeight: 1.1 }}>
-                {singleVisitPct}%
-              </div>
-              <div style={{ fontSize: 13, color: "#37485A", marginTop: 4 }}>
-                {singleVisitTrue} av {singleVisitMarked.length} ärenden löstes utan återbesök.
-                Baseras på ärenden där detta är ifyllt av teknikern.
-              </div>
-            </>
-          )}
-        </div>
 
-        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-            📦 Fördelning per produkttyp
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+              🎯 Löst vid första besöket
+            </div>
+            {singleVisitPct === null ? (
+              <>
+                <div style={{ fontSize: 14, color: "#37485A", lineHeight: 1.6 }}>
+                  Ingen data ännu - teknikern bockar i "Löst vid första besöket" i ärendets detaljvy
+                  när ett ärende avslutas, och måttet börjar fyllas i här automatiskt.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 48, fontWeight: 800, color: "#2C5A82", lineHeight: 1.1 }}>
+                  {singleVisitPct}%
+                </div>
+                <div style={{ fontSize: 13, color: "#37485A", marginTop: 4 }}>
+                  {singleVisitTrue} av {singleVisitMarked.length} ärenden löstes utan återbesök.
+                  Baseras på ärenden där detta är ifyllt av teknikern.
+                </div>
+              </>
+            )}
           </div>
-          {produktData.length === 0 ? (
-            <EmptyStatCard text="Inga ärenden att visa fördelning för än." />
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(produktData.length * 40, 80)}>
-              <BarChart data={produktData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
-                <CartesianGrid horizontal={false} stroke="#EDEFF1" />
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={100}
-                  tick={{ fontSize: 12, fill: "#37485A" }}
-                  axisLine={{ stroke: "#E2E6EA" }}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "#F7F9FB" }}
-                  formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
-                  contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
-                />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
-                  {produktData.map((row) => (
-                    <Cell key={row.name} fill={row.fill} />
-                  ))}
-                  <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
 
-      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-          🗓 {timelineTitle}
-        </div>
-        {timeline.data.length === 0 ? (
-          <EmptyStatCard text="Inga ärenden att visa volym för än." />
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={timeline.data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-              <CartesianGrid vertical={false} stroke="#EDEFF1" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: "#7A8794" }}
-                axisLine={{ stroke: "#E2E6EA" }}
-                tickLine={false}
-                interval={timeline.data.length > 12 ? "preserveStartEnd" : 0}
-              />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#7A8794" }} axisLine={false} tickLine={false} width={28} />
-              <Tooltip
-                cursor={{ fill: "#F7F9FB" }}
-                formatter={(v) => [`${v} ärenden`, ""]}
-                contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
-              />
-              <Bar dataKey="count" fill="#2C5A82" radius={[4, 4, 0, 0]} maxBarSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16, marginBottom: 16 }}>
-        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-            🏷 Ärenden per märke
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+              🗓 {timelineTitle}
+            </div>
+            {timeline.data.length === 0 ? (
+              <EmptyStatCard text="Inga ärenden att visa volym för än." />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={timeline.data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                  <CartesianGrid vertical={false} stroke="#EDEFF1" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: "#7A8794" }}
+                    axisLine={{ stroke: "#E2E6EA" }}
+                    tickLine={false}
+                    interval={timeline.data.length > 12 ? "preserveStartEnd" : 0}
+                  />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#7A8794" }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip
+                    cursor={{ fill: "#F7F9FB" }}
+                    formatter={(v) => [`${v} ärenden`, ""]}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+                  />
+                  <Bar dataKey="count" fill="#2C5A82" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          {markeData.length === 0 ? (
-            <EmptyStatCard text="Inga ärenden att visa märkesfördelning för än." />
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(markeData.length * 40, 80)}>
-              <BarChart data={markeData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
-                <CartesianGrid horizontal={false} stroke="#EDEFF1" />
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={100}
-                  tick={{ fontSize: 12, fill: "#37485A" }}
-                  axisLine={{ stroke: "#E2E6EA" }}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "#F7F9FB" }}
-                  formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
-                  contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
-                />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
-                  {markeData.map((row) => (
-                    <Cell key={row.name} fill={row.fill} />
-                  ))}
-                  <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+        </>
+      )}
 
-        <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-          {selectedModel ? (
-            <ModelDetail group={selectedModelGroup} onBack={() => setSelectedModel(null)} />
-          ) : (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-                🔩 Vanligaste modeller
-              </div>
-              <RankedList rows={modelData} emptyText="Inga modelldata att visa än." onRowClick={(row) => setSelectedModel(row.name)} />
-            </>
-          )}
-        </div>
-      </div>
+      {statsTab === "product-brand" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+              📦 Fördelning per produkttyp
+            </div>
+            {produktData.length === 0 ? (
+              <EmptyStatCard text="Inga ärenden att visa fördelning för än." />
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(produktData.length * 40, 80)}>
+                <BarChart data={produktData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="#EDEFF1" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={100}
+                    tick={{ fontSize: 12, fill: "#37485A" }}
+                    axisLine={{ stroke: "#E2E6EA" }}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#F7F9FB" }}
+                    formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                    {produktData.map((row) => (
+                      <Cell key={row.name} fill={row.fill} />
+                    ))}
+                    <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
 
-      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-          🧠 Vanligaste trolig orsak
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+              🏷 Ärenden per märke
+            </div>
+            {markeData.length === 0 ? (
+              <EmptyStatCard text="Inga ärenden att visa märkesfördelning för än." />
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(markeData.length * 40, 80)}>
+                <BarChart data={markeData} layout="vertical" margin={{ top: 4, right: 56, left: 4, bottom: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="#EDEFF1" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={100}
+                    tick={{ fontSize: 12, fill: "#37485A" }}
+                    axisLine={{ stroke: "#E2E6EA" }}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#F7F9FB" }}
+                    formatter={(_, __, props) => [`${props.payload.count} ärenden (${props.payload.pct}%)`, props.payload.name]}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #EAEEF2", fontSize: 13 }}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                    {markeData.map((row) => (
+                      <Cell key={row.name} fill={row.fill} />
+                    ))}
+                    <LabelList dataKey="labelText" position="right" style={{ fill: "#37485A", fontSize: 12, fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
-        <RankedList rows={orsakData} emptyText="Inga bedömda orsaker att visa än." />
-      </div>
+      )}
+
+      {statsTab === "models-causes" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+            {selectedModel ? (
+              <ModelDetail group={selectedModelGroup} onBack={() => setSelectedModel(null)} />
+            ) : (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+                  🔩 Vanligaste modeller
+                </div>
+                <RankedList rows={modelData} emptyText="Inga modelldata att visa än." onRowClick={(row) => setSelectedModel(row.name)} />
+              </>
+            )}
+          </div>
+
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #EAEEF2", padding: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+              🧠 Vanligaste trolig orsak
+            </div>
+            <RankedList rows={orsakData} emptyText="Inga bedömda orsaker att visa än." />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
