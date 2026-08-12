@@ -1,16 +1,20 @@
 "use client";
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from "recharts";
 
-const supabase = createClient(
-  "https://lwnwoeftisepokhgcudq.supabase.co",
-  "sb_publishable_bes2DlczBvaK3msGAQmDrw_PZoTHmqZ"
-);
-
-const ADMIN_PASSWORD = "fixa2026";
+// Adminpanelen pratar inte längre direkt med Supabase från webbläsaren.
+// Alla anrop går via /api/admin/*, som verifierar lösenordet på servern
+// och använder service-role-nyckeln där (se lib/supabaseAdmin.js).
+// Lösenordet skickas med som header på varje anrop - se adminFetch nedan.
+async function adminFetch(path, password, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { ...(options.headers || {}), "x-admin-password": password },
+  });
+  return res;
+}
 
 // Hur lång tid sedan ärendet skapades
 function timeSince(createdAt) {
@@ -89,9 +93,24 @@ export default function AdminPage() {
 
   const fetchCases = async () => {
     setLoading(true);
-    const { data } = await supabase.from("cases").select("*").order("created_at", { ascending: false });
-    setCases(data || []);
+    const res = await adminFetch("/api/admin/cases", password);
+    if (res.ok) {
+      const { data } = await res.json();
+      setCases(data || []);
+    } else {
+      // Lösenordet är inte längre giltigt mot servern (t.ex. ändrat) - logga ut.
+      setLoggedIn(false);
+    }
     setLoading(false);
+  };
+
+  const handleLogin = async () => {
+    const res = await adminFetch("/api/admin/cases", password);
+    if (res.ok) {
+      setLoggedIn(true);
+    } else {
+      alert("Fel lösenord");
+    }
   };
 
   const updateStatus = async (caseId, newStatus) => {
@@ -99,9 +118,13 @@ export default function AdminPage() {
     const prevSelected = selected;
     setCases((cs) => cs.map((c) => (c.id === caseId ? { ...c, status: newStatus } : c)));
     setSelected((s) => (s && s.id === caseId ? { ...s, status: newStatus } : s));
-    const { error } = await supabase.from("cases").update({ status: newStatus }).eq("id", caseId);
-    if (error) {
-      console.error("Kunde inte uppdatera status:", error);
+    const res = await adminFetch(`/api/admin/cases/${caseId}`, password, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!res.ok) {
+      console.error("Kunde inte uppdatera status:", await res.text());
       setCases(prevCases);
       setSelected(prevSelected);
     }
@@ -112,9 +135,13 @@ export default function AdminPage() {
     const prevSelected = selected;
     setCases((cs) => cs.map((c) => (c.id === caseId ? { ...c, loest_forsta_besoket: value } : c)));
     setSelected((s) => (s && s.id === caseId ? { ...s, loest_forsta_besoket: value } : s));
-    const { error } = await supabase.from("cases").update({ loest_forsta_besoket: value }).eq("id", caseId);
-    if (error) {
-      console.error("Kunde inte uppdatera löst vid första besöket:", error);
+    const res = await adminFetch(`/api/admin/cases/${caseId}`, password, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loest_forsta_besoket: value }),
+    });
+    if (!res.ok) {
+      console.error("Kunde inte uppdatera löst vid första besöket:", await res.text());
       setCases(prevCases);
       setSelected(prevSelected);
     }
@@ -139,9 +166,9 @@ export default function AdminPage() {
         <div style={{ fontSize: 14, color: "#7A8794", marginBottom: 24 }}>Logga in för att se ärenden</div>
         <input type="password" placeholder="Lösenord" value={password}
           onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && password === ADMIN_PASSWORD && setLoggedIn(true)}
+          onKeyDown={e => e.key === "Enter" && handleLogin()}
           style={{ width: "100%", padding: "12px 14px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 16, marginBottom: 12, boxSizing: "border-box" }} />
-        <button onClick={() => password === ADMIN_PASSWORD ? setLoggedIn(true) : alert("Fel lösenord")}
+        <button onClick={handleLogin}
           style={{ width: "100%", background: "#2C5A82", color: "#FFF", border: "none", borderRadius: 8, padding: "12px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
           Logga in
         </button>
