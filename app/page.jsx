@@ -311,6 +311,7 @@ export default function FixaTriageV7() {
   const [pendingImage, setPendingImage] = useState(null); // {data, mediaType, preview, isReceipt}
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [slowResponse, setSlowResponse] = useState(false);
   const [error, setError] = useState("");
   const emptyCase = {
     produkttyp: "", marke: "", modell: "", serienr: "", felkod: "", symptom: "",
@@ -370,6 +371,7 @@ export default function FixaTriageV7() {
   // inte bara det svar där statusen först sätts.
   const lostSavedRef = useRef(false);
   const searchTimerRef = useRef(null);
+  const slowTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
   const uploadKindRef = useRef("product");
@@ -500,6 +502,9 @@ export default function FixaTriageV7() {
     // Ett vanligt svar kommer oftast inom ett par sekunder — tar det längre är en
     // webbsökning efter felkod en trolig anledning, så vi byter text i indikatorn.
     searchTimerRef.current = setTimeout(() => setSearching(true), 3500);
+    // Dröjer svaret ovanligt länge (oavsett anledning) — lägg till en diskret
+    // rad under indikatorn så kunden vet att FIXA fortfarande jobbar på det.
+    slowTimerRef.current = setTimeout(() => setSlowResponse(true), 9000);
     try {
       // Skickar bara bilddata för det senaste meddelandet - äldre bilder i
       // historiken skulle annars skickas om på varje nytt anrop (FIXA har redan
@@ -577,7 +582,9 @@ export default function FixaTriageV7() {
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
     } finally {
       clearTimeout(searchTimerRef.current);
+      clearTimeout(slowTimerRef.current);
       setSearching(false);
+      setSlowResponse(false);
       setLoading(false);
     }
   };
@@ -810,14 +817,22 @@ fetch("/api/chat/save-case", {  method: "POST",
                   <div style={{
                     padding: "12px 16px", borderRadius: 18, borderBottomLeftRadius: 4,
                     background: "#FFFFFF", border: "1px solid #EAEEF2",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)", display: "flex", gap: 8, alignItems: "center",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", gap: 4,
                   }}>
-                    <span style={{ fontSize: 13, color: "#7A8794", fontStyle: "italic" }}>{searching ? "Kollar upp felkoden åt dig…" : "FIXA tänker"}</span>
-                    <span style={{ display: "flex", gap: 4 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0s" }}></span>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0.2s" }}></span>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0.4s" }}></span>
-                    </span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "#7A8794", fontStyle: "italic" }}>{searching ? "Kollar upp felkoden åt dig…" : "FIXA tänker"}</span>
+                      <span style={{ display: "flex", gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0s" }}></span>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0.2s" }}></span>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9AA6B1", animation: "fixaTyping 1.4s infinite ease-in-out", animationDelay: "0.4s" }}></span>
+                      </span>
+                    </div>
+                    {/* Diskret extrarad om svaret drar ut på tiden (>9s) — ersätter inte
+                        raden ovan, läggs bara till under den så kunden vet att FIXA
+                        fortfarande jobbar på det. */}
+                    {slowResponse && (
+                      <span style={{ fontSize: 11.5, color: "#9AA6B1" }}>Det här tar lite längre tid än vanligt</span>
+                    )}
                   </div>
                 </div>
               )}
