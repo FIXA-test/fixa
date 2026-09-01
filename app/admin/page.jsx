@@ -82,8 +82,16 @@ export default function AdminPage() {
   const [produkttypFilter, setProdukttypFilter] = useState("all");
   const [remoteOnlyFilter, setRemoteOnlyFilter] = useState(false);
   const [view, setView] = useState("cases");
+  // Interna anteckningar för det just nu valda ärendet - hämtas separat
+  // (inte i den stora ärendelistan) eftersom listan kan växa obegränsat.
+  const [caseNotes, setCaseNotes] = useState([]);
+  const [newNoteText, setNewNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
+
+  // Läser om anteckningarna varje gång ett annat ärende väljs.
+  useEffect(() => { if (selected?.id) fetchNotesFor(selected.id); }, [selected?.id]);
 
   // Öppnar rätt ärende direkt om sidan laddas med ?case=<id> i URL:en (t.ex.
   // länken i notismailet för nya ärenden). Sätts bara en gång per inloggning,
@@ -175,6 +183,35 @@ export default function AdminPage() {
       setCases(prevCases);
       setSelected(prevSelected);
     }
+  };
+
+  const fetchNotesFor = async (caseId) => {
+    const res = await adminFetch(`/api/admin/cases/${caseId}/notes`, password);
+    if (res.ok) {
+      const { data } = await res.json();
+      setCaseNotes(data || []);
+    }
+  };
+
+  // Lägger till en ny intern anteckning på det valda ärendet. Går bara att
+  // lägga till - ingen redigering/radering (se app/api/admin/cases/[id]/notes/route.js).
+  const addNote = async () => {
+    const note = newNoteText.trim();
+    if (!note || !selected || savingNote) return;
+    setSavingNote(true);
+    const res = await adminFetch(`/api/admin/cases/${selected.id}/notes`, password, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    });
+    if (res.ok) {
+      const { data } = await res.json();
+      setCaseNotes((prev) => [data, ...prev]);
+      setNewNoteText("");
+    } else {
+      console.error("Kunde inte spara anteckning:", await res.text());
+    }
+    setSavingNote(false);
   };
 
   // Produkttyper som faktiskt förekommer i ärendena — ingen hårdkodad lista att hålla i synk
@@ -400,11 +437,48 @@ export default function AdminPage() {
                 </div>
               )}
               {selected.rapport && (
-                <div>
+                <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>📋 Sammanfattning</div>
                   <div style={{ fontSize: 13, color: "#37485A", lineHeight: 1.6 }}>{selected.rapport}</div>
                 </div>
               )}
+              <div style={{ borderTop: "1px solid #EAEEF2", paddingTop: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
+                  🔒 Interna anteckningar (syns aldrig för kund)
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <textarea
+                    value={newNoteText}
+                    onChange={(e) => setNewNoteText(e.target.value)}
+                    placeholder="T.ex. &quot;Ringde kund, inget svar&quot; eller &quot;Beställt reservdel&quot;..."
+                    rows={2}
+                    style={{ flex: 1, padding: "8px 10px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 13, fontFamily: "inherit", resize: "vertical", color: "#111827" }}
+                  />
+                  <button
+                    onClick={addNote}
+                    disabled={!newNoteText.trim() || savingNote}
+                    style={{
+                      padding: "0 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, alignSelf: "flex-start",
+                      background: !newNoteText.trim() || savingNote ? "#C9D1D8" : "#2C5A82",
+                      color: "#FFF", cursor: !newNoteText.trim() || savingNote ? "default" : "pointer", height: 36,
+                    }}
+                  >
+                    Lägg till
+                  </button>
+                </div>
+                {caseNotes.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: "#9AA6B1" }}>Inga anteckningar än.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {caseNotes.map((n) => (
+                      <div key={n.id} style={{ borderTop: "1px solid #F2F4F6", paddingTop: 8 }}>
+                        <div style={{ fontSize: 11, color: "#9AA6B1", marginBottom: 2 }}>{new Date(n.created_at).toLocaleString("sv-SE")}</div>
+                        <div style={{ fontSize: 13, color: "#37485A", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{n.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div style={{ background: "#FFF", borderRadius: 12, padding: 40, border: "1px solid #EAEEF2", display: "flex", alignItems: "center", justifyContent: "center", color: "#7A8794", fontSize: 14 }}>
