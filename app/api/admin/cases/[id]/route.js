@@ -2,7 +2,7 @@ import { supabaseAdmin, isAdminRequest } from "@/lib/supabaseAdmin";
 
 // Vitlista över fält adminpanelen får ändra. Utöka vid behov, men undvik
 // att tillåta helt fria uppdateringar av vilken kolumn som helst.
-const ALLOWED_FIELDS = ["status", "loest_forsta_besoket"];
+const ALLOWED_FIELDS = ["status", "loest_forsta_besoket", "resolved_remotely"];
 
 // PATCH /api/admin/cases/<id> - body: { status?, loest_forsta_besoket? }
 // Ersätter de tidigare direkta anropen från webbläsaren

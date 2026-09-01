@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from "recharts";
@@ -80,9 +80,15 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [produkttypFilter, setProdukttypFilter] = useState("all");
+  const [remoteOnlyFilter, setRemoteOnlyFilter] = useState(false);
   const [view, setView] = useState("cases");
 
   useEffect(() => { if (loggedIn) fetchCases(); }, [loggedIn]);
+
+  // Öppnar rätt ärende direkt om sidan laddas med ?case=<id> i URL:en (t.ex.
+  // länken i notismailet för nya ärenden). Sätts bara en gång per inloggning,
+  // i fetchCases nedan, så man kan avmarkera ärendet manuellt efteråt.
+  const openedFromUrlRef = useRef(false);
 
   // Uppdaterar återkopplingstimern varje minut
   useEffect(() => {
@@ -96,7 +102,14 @@ export default function AdminPage() {
     const res = await adminFetch("/api/admin/cases", password);
     if (res.ok) {
       const { data } = await res.json();
-      setCases(data || []);
+      const list = data || [];
+      setCases(list);
+      if (!openedFromUrlRef.current) {
+        openedFromUrlRef.current = true;
+        const caseId = new URLSearchParams(window.location.search).get("case");
+        const match = caseId && list.find((c) => c.id === caseId);
+        if (match) setSelected(match);
+      }
     } else {
       // Lösenordet är inte längre giltigt mot servern (t.ex. ändrat) - logga ut.
       setLoggedIn(false);
@@ -147,6 +160,23 @@ export default function AdminPage() {
     }
   };
 
+  const updateResolvedRemotely = async (caseId, value) => {
+    const prevCases = cases;
+    const prevSelected = selected;
+    setCases((cs) => cs.map((c) => (c.id === caseId ? { ...c, resolved_remotely: value } : c)));
+    setSelected((s) => (s && s.id === caseId ? { ...s, resolved_remotely: value } : s));
+    const res = await adminFetch(`/api/admin/cases/${caseId}`, password, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolved_remotely: value }),
+    });
+    if (!res.ok) {
+      console.error("Kunde inte uppdatera löst på distans:", await res.text());
+      setCases(prevCases);
+      setSelected(prevSelected);
+    }
+  };
+
   // Produkttyper som faktiskt förekommer i ärendena — ingen hårdkodad lista att hålla i synk
   const produkttyper = Array.from(new Set(cases.map((c) => c.produkttyp).filter(Boolean))).sort();
 
@@ -155,7 +185,8 @@ export default function AdminPage() {
     const matchesSearch = !q || (c.kund_namn || "").toLowerCase().includes(q) || (c.id || "").toLowerCase().includes(q);
     const matchesStatus = statusFilter === "all" || normalizeStatus(c.status) === statusFilter;
     const matchesProdukttyp = produkttypFilter === "all" || c.produkttyp === produkttypFilter;
-    return matchesSearch && matchesStatus && matchesProdukttyp;
+    const matchesRemote = !remoteOnlyFilter || c.resolved_remotely === true;
+    return matchesSearch && matchesStatus && matchesProdukttyp && matchesRemote;
   });
 
   if (!loggedIn) return (
@@ -235,6 +266,15 @@ export default function AdminPage() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid #E2E6EA", borderRadius: 8, fontSize: 14, background: "#FFF", color: "#37485A", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={remoteOnlyFilter}
+              onChange={(e) => setRemoteOnlyFilter(e.target.checked)}
+              style={{ cursor: "pointer" }}
+            />
+            Endast löst på distans
+          </label>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -270,6 +310,11 @@ export default function AdminPage() {
                   </select>
                 </div>
                 <div style={{ fontSize: 13, color: "#37485A" }}>{c.produkttyp || "—"} {c.marke ? `· ${c.marke}` : ""} {c.modell ? `· ${c.modell}` : ""}</div>
+                {c.resolved_remotely && (
+                  <span style={{ display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 700, color: "#1E7A4D", background: "#E4F3EB", borderRadius: 10, padding: "2px 8px" }}>
+                    📡 Löst på distans
+                  </span>
+                )}
                 <div style={{ fontSize: 12, color: "#7A8794", marginTop: 4 }}>{c.symptom || "Inget symptom"}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 6 }}>
                   <span style={{ fontSize: 11, color: "#9AA6B1" }}>{new Date(c.created_at).toLocaleString("sv-SE")}</span>
@@ -322,6 +367,15 @@ export default function AdminPage() {
                     style={{ width: 16, height: 16, cursor: "pointer" }}
                   />
                   Löst vid första besöket (inga återbesök krävdes)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: "#37485A", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!selected.resolved_remotely}
+                    onChange={(e) => updateResolvedRemotely(selected.id, e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                  />
+                  📡 Löst på distans (inget fysiskt besök krävdes)
                 </label>
               </div>
               <div style={{ marginBottom: 16 }}>
