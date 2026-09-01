@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { maskPersonnummerInObject } from "@/lib/personnummerFilter.mjs";
 
 const supabase = createClient(
   "https://lwnwoeftisepokhgcudq.supabase.co",
@@ -7,7 +8,11 @@ const supabase = createClient(
 
 export async function POST(req) {
   try {
-    const data = await req.json();
+    const raw = await req.json();
+    // Maskerar ev. personnummer som råkat läsas av från en kvittobild och
+    // hamnat i ett fritextfält (t.ex. rapport/symptom). kund_personnr
+    // undantas eftersom det fältet avsiktligt samlar in kundens personnummer.
+    const data = maskPersonnummerInObject(raw, ["kund_personnr"]);
     await supabase.from("cases").insert({
       kund_namn: data.kund_namn || null,
       kund_personnr: data.kund_personnr || null,
@@ -26,7 +31,11 @@ export async function POST(req) {
       reservdel: data.reservdel || null,
       specialist: data.specialist || null,
       rapport: data.rapport || null,
-      status: "tekniker",
+      // "lost" = kunden bekräftade själv att en säker åtgärd löste problemet
+      // (se lostSavedRef i app/page.jsx) - allt annat är det vanliga
+      // formulärflödet för att boka en tekniker.
+      status: data.status === "lost" ? "lost" : "tekniker",
+      resolved_remotely: data.status === "lost",
     });
     return Response.json({ success: true });
   } catch (error) {

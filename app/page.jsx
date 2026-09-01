@@ -24,7 +24,7 @@ TON OCH SPRÅKSTIL (viktigt — läs detta först)
 - Om kunden verkar frustrerad, erkänn det kort ("Förstår att det är jobbigt när tvättmaskinen strular mitt i vardagen") och gå sen vidare. Överdriv inte medkänslan.
 - Undvik falsk artighet som "Tack för den värdefulla informationen!" — det låter hult. Säg hellre "Ok, då vet jag" eller "Bra, då tar vi det därifrån."
 - HÅLL SVAREN KORTA. Kunden vill inte läsa långa texter i en chatt. Ett par meningar i taget.
-- FÖRESLÅ FLERA LÖSNINGAR SAMTIDIGT. När du guidar felsökning, ge kunden 2–3 möjliga saker att testa i samma svar (som en kort punktlista), inte en fråga/åtgärd i taget. Det är mindre irriterande för kunden och snabbare mot lösning. Exempel: *"Testa dessa i den här ordningen: 1) rengör frontfiltret, 2) kontrollera att luckan stänger helt, 3) kör en tomkörning på 90 grader. Berätta sen vad som händer."*
+- FÖRESLÅ FLERA LÖSNINGAR SAMTIDIGT. När du guidar felsökning, ge kunden 2–3 möjliga saker att testa i samma svar (som en kort punktlista), inte en fråga/åtgärd i taget. Det är mindre irriterande för kunden och snabbare mot lösning. Exempel: *"Testa dessa i den här ordningen: 1) rengör frontfiltret, 2) kontrollera att luckan stänger helt, 3) kör en tomkörning på 90 grader. Säg till om det löste sig, eller om den fortfarande strular."*
 - När du samlar in kunduppgifter: gör INTE det som chattfrågor — ett formulär visas automatiskt när ärendet är redo för tekniker. Nämn inte att uppgifterna behövs, det sköts av formuläret.
 - Matcha kundens tekniska nivå. Om de säger "avloppspumpen surrar men det kommer inget vatten", behandla dem som den kunniga person de är — svara på samma nivå, hoppa över grundskoleförklaringar. Om de säger "den är trasig", förklara pedagogiskt utan att bli barnsligt förenklande.
 - Använd aldrig ord som "vänligen", "vänligen notera", "vi ber om ursäkt för besväret". Prata som en människa.
@@ -365,6 +365,10 @@ export default function FixaTriageV7() {
     return () => clearInterval(id);
   }, [view]);
   const countedRef = useRef(false);
+  // Förhindrar att samma "löst på distans"-ärende sparas flera gånger - FIXA
+  // upprepar status "lost" i ⟦CASE⟧-blocket i varje efterföljande svar också,
+  // inte bara det svar där statusen först sätts.
+  const lostSavedRef = useRef(false);
   const searchTimerRef = useRef(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
@@ -531,13 +535,28 @@ export default function FixaTriageV7() {
       }
       const { clean, data: parsed } = parseCase(fullText);
       if (parsed) {
-        setCaseData((prev) => ({
-          ...prev,
-          ...Object.fromEntries(Object.entries(parsed).filter(([, v]) => (Array.isArray(v) ? v.length > 0 : v !== "" && v != null))),
-        }));
+        const filteredParsed = Object.fromEntries(Object.entries(parsed).filter(([, v]) => (Array.isArray(v) ? v.length > 0 : v !== "" && v != null)));
+        setCaseData((prev) => ({ ...prev, ...filteredParsed }));
         if (!countedRef.current && (parsed.status === "lost" || parsed.status === "tekniker")) {
           countedRef.current = true;
           setSessionStats((s) => ({ ...s, [parsed.status]: s[parsed.status] + 1 }));
+        }
+        // Kunden har själv bekräftat att en säker åtgärd löste problemet -
+        // spara ärendet direkt (samma turn, ingen efterföljande request
+        // krävs) via samma endpoint som tekniker-flödet, men markerat löst
+        // på distans. lostSavedRef förhindrar dubbelsparning om FIXA
+        // upprepar status "lost" i senare svar i samma konversation.
+        if (!lostSavedRef.current && parsed.status === "lost") {
+          lostSavedRef.current = true;
+          fetch("/api/chat/save-case", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...caseData, ...filteredParsed, status: "lost" }),
+          })
+            .then(async (res) => {
+              if (!res.ok) console.error("Kunde inte spara löst-på-distans-ärende:", res.status, await res.text());
+            })
+            .catch((e) => console.error("Kunde inte spara löst-på-distans-ärende:", e));
         }
       }
       // Om texten är tom efter att CASE tagits bort, visa åtminstone en meningsfull fallback
@@ -620,6 +639,7 @@ fetch("/api/chat/save-case", {  method: "POST",
   const resetCase = () => {
     setCaseData(emptyCase);
     countedRef.current = false;
+    lostSavedRef.current = false;
     setBooking(false);
     setFormSubmitted(false);
     setCustomerForm({ namn: "", personnr: "", gata: "", postnr: "", ort: "", telefon: "", epost: "", rot: "" });
@@ -635,6 +655,8 @@ fetch("/api/chat/save-case", {  method: "POST",
       if (resumePrompt.customerForm) setCustomerForm(resumePrompt.customerForm);
       // Redan räknad i en tidigare session — undviker dubbelräkning i sessionsstatistiken
       if (restoredCase.status === "lost" || restoredCase.status === "tekniker") countedRef.current = true;
+      // Redan sparat i databasen förra gången status blev "lost" - undviker dubbelsparning
+      if (restoredCase.status === "lost") lostSavedRef.current = true;
     }
     setResumePrompt(null);
   };
