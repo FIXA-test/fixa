@@ -364,7 +364,16 @@ export default function AdminPage() {
             })}
           </div>
           {selected ? (
-            <div style={{ background: "#FFF", borderRadius: 12, padding: 24, border: "1px solid #EAEEF2", height: "fit-content", position: "sticky", top: 24 }}>
+            <div style={{
+              background: "#FFF", borderRadius: 12, padding: 24, border: "1px solid #EAEEF2",
+              position: "sticky", top: 24,
+              // Utan detta pinnas kortet nära toppen av viewporten (sticky) medan
+              // ärendelistan till vänster scrollas - dess EGET innehåll (t.ex.
+              // anteckningssektionen längst ner) blir då bara nåbart efter att ha
+              // scrollat igenom HELA ärendelistan. maxHeight+overflowY ger kortet
+              // sin egen interna scroll istället, oberoende av listans längd.
+              maxHeight: "calc(100vh - 48px)", overflowY: "auto",
+            }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 700, fontSize: 18, color: "#111827" }}>{selected.kund_namn || "Okänd kund"}</div>
                 {(() => {
@@ -444,7 +453,7 @@ export default function AdminPage() {
               )}
               <div style={{ borderTop: "1px solid #EAEEF2", paddingTop: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#7A8794", textTransform: "uppercase", marginBottom: 8 }}>
-                  🔒 Interna anteckningar (syns aldrig för kund)
+                  🔒 Interna anteckningar
                 </div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                   <textarea
