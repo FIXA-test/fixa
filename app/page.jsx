@@ -5,6 +5,8 @@ import {
   ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import { hasConsent } from "@/lib/cookieConsent.mjs";
+import CookieConsentProvider from "@/app/components/CookieConsentProvider";
+import SiteFooter from "@/app/components/SiteFooter";
 
 // ─────────────────────────────────────────────────────────────
 //  FIXA — AI-triage för vitvarugarantier
@@ -714,6 +716,7 @@ fetch("/api/chat/save-case", {  method: "POST",
   };
 
   return (
+    <CookieConsentProvider>
     <div style={S.page}>
       <style>{`
         @keyframes fixaTyping {
@@ -1311,5 +1314,7 @@ fetch("/api/chat/save-case", {  method: "POST",
       })()}
 
     </div>
+    <SiteFooter />
+    </CookieConsentProvider>
   );
 }
