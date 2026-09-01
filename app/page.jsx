@@ -4,6 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
+import { hasConsent } from "@/lib/cookieConsent.mjs";
 
 // ─────────────────────────────────────────────────────────────
 //  FIXA — AI-triage för vitvarugarantier
@@ -321,12 +322,16 @@ export default function FixaTriageV7() {
   };
   const [caseData, setCaseData] = useState(emptyCase);
   const [sessionStats, setSessionStats] = useState(() => {
+    // Läser bara tillbaka tidigare sparad statistik om kunden gett samtycke
+    // till "Funktionella" cookies - annars startar sessionen om, som förstagångsbesök.
+    if (!hasConsent("functional")) return { lost: 0, tekniker: 0, forbrukKr: 0 };
     try {
       const saved = localStorage.getItem("fixa_stats");
       return saved ? JSON.parse(saved) : { lost: 0, tekniker: 0, forbrukKr: 0 };
     } catch { return { lost: 0, tekniker: 0, forbrukKr: 0 }; }
   });
   const [orders, setOrders] = useState(() => {
+    if (!hasConsent("functional")) return SEED_ORDERS;
     try {
       const saved = localStorage.getItem("fixa_orders");
       if (saved) {
@@ -344,8 +349,10 @@ export default function FixaTriageV7() {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [, setTick] = useState(0);
-  // Ej inskickat ärende sparat i en tidigare session — erbjuds som återupptagning nedan
+  // Ej inskickat ärende sparat i en tidigare session — erbjuds som återupptagning nedan.
+  // Kräver samtycke till "Funktionella" cookies, precis som sparandet nedan.
   const [resumePrompt, setResumePrompt] = useState(() => {
+    if (!hasConsent("functional")) return null;
     try {
       const raw = localStorage.getItem("fixa_draft_case");
       if (!raw) return null;
@@ -402,8 +409,10 @@ export default function FixaTriageV7() {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [messages, loading, booking, formSubmitted, caseData.status, pendingImage]);
 
-  // Sparar alla ärenden till localStorage automatiskt när något ändras
+  // Sparar alla ärenden till localStorage automatiskt när något ändras -
+  // kräver samtycke till "Funktionella" cookies (se cookiebannern).
   useEffect(() => {
+    if (!hasConsent("functional")) return;
     try {
       localStorage.setItem("fixa_orders", JSON.stringify(orders));
     } catch (e) {
@@ -411,8 +420,9 @@ export default function FixaTriageV7() {
     }
   }, [orders]);
 
-  // Sparar sessionsstatistik till localStorage
+  // Sparar sessionsstatistik till localStorage - kräver samtycke, se ovan.
   useEffect(() => {
+    if (!hasConsent("functional")) return;
     try {
       localStorage.setItem("fixa_stats", JSON.stringify(sessionStats));
     } catch (e) {
@@ -420,9 +430,10 @@ export default function FixaTriageV7() {
     }
   }, [sessionStats]);
 
-  // Sparar pågående (ej inskickat) ärende lokalt så kunden kan återuppta det inom 48h
+  // Sparar pågående (ej inskickat) ärende lokalt så kunden kan återuppta det
+  // inom 48h - kräver samtycke, se ovan.
   useEffect(() => {
-    if (formSubmitted || messages.length <= 1) return;
+    if (!hasConsent("functional") || formSubmitted || messages.length <= 1) return;
     try {
       localStorage.setItem("fixa_draft_case", JSON.stringify({ messages, caseData, customerForm, savedAt: Date.now() }));
     } catch (e) {
