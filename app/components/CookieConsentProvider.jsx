@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { COOKIE_CATEGORIES, loadConsent, saveConsent } from "@/lib/cookieConsent.mjs";
 
 // Delas av hela sajten (kund-chatten och admin) via app/layout.tsx. Håller
@@ -86,14 +86,32 @@ function Toggle({ checked, disabled, onChange }) {
 }
 
 export default function CookieConsentProvider({ children }) {
-  // Lazy init (som mönstret för övrig localStorage-läsning i app/page.jsx) -
-  // körs SSR-säkert tack vare loadConsent()s egna try/catch.
-  const [consent, setConsent] = useState(() => loadConsent());
-  const [bannerVisible, setBannerVisible] = useState(() => !loadConsent());
+  // VIKTIGT: får INTE läsa localStorage i en lazy useState-initializer här.
+  // "/" är statiskt förrenderad - servern har ingen localStorage och skulle
+  // då ALLTID rendera bannern som synlig, medan en återvändande besökares
+  // klient direkt vill dölja den. Den strukturella hydration-missmatchen
+  // (en hel undergren närvarande i SSR-HTML men frånvarande i klientens
+  // tänkta träd) gör att React tyst lämnar bannern orörd i DOM:en utan att
+  // fästa några event-handlers vid den - inga fel, ingen konsolaktivitet,
+  // knapparna svarar aldrig på klick. Se felsökningen som föregick denna fix.
+  //
+  // Lösningen: starta identiskt på server och klient (ingen banner alls),
+  // och låt en useEffect - som per definition bara körs i webbläsaren,
+  // efter hydrering - läsa det faktiska samtycket och uppdatera synligheten.
+  const [consent, setConsent] = useState(null);
+  const [bannerVisible, setBannerVisible] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Kryssrutornas läge INNE i panelen, innan man sparar - separat state så
   // man kan bocka i/ur fritt och ändå Avbryt utan att det redan slagit igenom.
   const [draftFunctional, setDraftFunctional] = useState(false);
+
+  useEffect(() => { syncConsentFromStorage(); }, []);
+
+  const syncConsentFromStorage = () => {
+    const existing = loadConsent();
+    setConsent(existing);
+    setBannerVisible(!existing);
+  };
 
   const commit = (categories) => {
     const record = saveConsent(categories);
