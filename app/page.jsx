@@ -323,27 +323,19 @@ export default function FixaTriageV7() {
     specialist: "", rapport: "",
   };
   const [caseData, setCaseData] = useState(emptyCase);
-  const [sessionStats, setSessionStats] = useState(() => {
-    // Läser bara tillbaka tidigare sparad statistik om kunden gett samtycke
-    // till "Funktionella" cookies - annars startar sessionen om, som förstagångsbesök.
-    if (!hasConsent("functional")) return { lost: 0, tekniker: 0, forbrukKr: 0 };
-    try {
-      const saved = localStorage.getItem("fixa_stats");
-      return saved ? JSON.parse(saved) : { lost: 0, tekniker: 0, forbrukKr: 0 };
-    } catch { return { lost: 0, tekniker: 0, forbrukKr: 0 }; }
-  });
-  const [orders, setOrders] = useState(() => {
-    if (!hasConsent("functional")) return SEED_ORDERS;
-    try {
-      const saved = localStorage.getItem("fixa_orders");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Bevarar seed om lagringen är tom, annars använder sparad data
-        return parsed.length > 0 ? parsed : SEED_ORDERS;
-      }
-      return SEED_ORDERS;
-    } catch { return SEED_ORDERS; }
-  });
+  // VIKTIGT: får INTE läsa localStorage/hasConsent() i lazy useState-
+  // initializers här längre - "/" är statiskt förrenderad, så servern
+  // skulle alltid få "inget samtycke" (ingen localStorage), medan en
+  // återvändande besökare som redan godkänt Funktionella cookies direkt
+  // skulle få sina riktiga sparade värden på klienten - en strukturell
+  // hydration-missmatch, samma sorts bugg som fixades i
+  // CookieConsentProvider.jsx (se commit "Fix cookie banner hydration
+  // mismatch..."). Startar därför identiskt på server och klient (samma
+  // default som en förstagångsbesökare), och läser in de riktiga sparade
+  // värdena i en useEffect (syncFunctionalStateFromStorage nedan) som bara
+  // körs i webbläsaren, efter hydrering.
+  const [sessionStats, setSessionStats] = useState({ lost: 0, tekniker: 0, forbrukKr: 0 });
+  const [orders, setOrders] = useState(SEED_ORDERS);
   const [booking, setBooking] = useState(false);
   const [customerForm, setCustomerForm] = useState({
     namn: "", personnr: "", gata: "", postnr: "", ort: "", telefon: "", epost: "", rot: ""
@@ -352,21 +344,9 @@ export default function FixaTriageV7() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [, setTick] = useState(0);
   // Ej inskickat ärende sparat i en tidigare session — erbjuds som återupptagning nedan.
-  // Kräver samtycke till "Funktionella" cookies, precis som sparandet nedan.
-  const [resumePrompt, setResumePrompt] = useState(() => {
-    if (!hasConsent("functional")) return null;
-    try {
-      const raw = localStorage.getItem("fixa_draft_case");
-      if (!raw) return null;
-      const draft = JSON.parse(raw);
-      if (!draft || !draft.savedAt || !Array.isArray(draft.messages) || draft.messages.length <= 1) return null;
-      if (Date.now() - draft.savedAt > 48 * 60 * 60 * 1000) {
-        localStorage.removeItem("fixa_draft_case");
-        return null;
-      }
-      return draft;
-    } catch { return null; }
-  });
+  // Kräver samtycke till "Funktionella" cookies. Startar som null (samma på
+  // server och klient) - se kommentaren vid sessionStats/orders ovan.
+  const [resumePrompt, setResumePrompt] = useState(null);
 
   // Uppdaterar tidsangivelserna varje minut
   useEffect(() => {
@@ -385,7 +365,10 @@ export default function FixaTriageV7() {
   const fileRef = useRef(null);
   const uploadKindRef = useRef("product");
   const orderCounter = useRef((() => {
-    // Hitta högsta ordernumret i sparade ärenden så nya nummer inte krockar
+    // Hitta högsta ordernumret i sparade ärenden så nya nummer inte krockar.
+    // Baseras här bara på SEED_ORDERS (se orders-initieringen ovan) - räknas
+    // om i syncFunctionalStateFromStorage när de riktiga sparade ordrarna
+    // har lästs in, annars skulle nya ordernummer kunna krocka med gamla.
     try {
       const nums = orders.map(o => {
         const m = String(o.id || "").match(/AO-(\d+)/);
@@ -395,6 +378,50 @@ export default function FixaTriageV7() {
       return max + 1;
     } catch { return 2473; }
   })());
+
+  // Läser in de riktiga sparade värdena (om kunden gett samtycke till
+  // "Funktionella" cookies) EFTER hydrering - se den stora kommentaren vid
+  // sessionStats/orders-initieringen ovan för varför detta inte får göras
+  // synkront i useState-initializers.
+  useEffect(() => { syncFunctionalStateFromStorage(); }, []);
+
+  const syncFunctionalStateFromStorage = () => {
+    if (!hasConsent("functional")) return;
+    try {
+      const savedStats = localStorage.getItem("fixa_stats");
+      if (savedStats) setSessionStats(JSON.parse(savedStats));
+    } catch { /* no-op */ }
+    try {
+      const savedOrders = localStorage.getItem("fixa_orders");
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        if (parsed.length > 0) {
+          setOrders(parsed);
+          // orderCounter initierades från SEED_ORDERS ovan (innan denna
+          // useEffect hann läsa den riktiga listan) - räknas om här så nya
+          // ordernummer inte krockar med tidigare sparade ordrar.
+          const nums = parsed.map((o) => {
+            const m = String(o.id || "").match(/AO-(\d+)/);
+            return m ? parseInt(m[1], 10) : 0;
+          });
+          orderCounter.current = Math.max(2472, ...nums) + 1;
+        }
+      }
+    } catch { /* no-op */ }
+    try {
+      const raw = localStorage.getItem("fixa_draft_case");
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft && draft.savedAt && Array.isArray(draft.messages) && draft.messages.length > 1) {
+          if (Date.now() - draft.savedAt > 48 * 60 * 60 * 1000) {
+            localStorage.removeItem("fixa_draft_case");
+          } else {
+            setResumePrompt(draft);
+          }
+        }
+      }
+    } catch { /* no-op */ }
+  };
 
   useEffect(() => {
     if (!scrollRef.current) return;
